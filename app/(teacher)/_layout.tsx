@@ -206,7 +206,9 @@ export default function TeacherLayout() {
   }
 
   if (Platform.OS === "web") {
-    return <WebSidebarLayout />;
+    // On web we want the same full-screen card-based dashboard as mobile,
+    // without any side navigation. Just render the current route.
+    return <Slot />;
   }
 
   return <NativeTabsLayout />;

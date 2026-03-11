@@ -41,6 +41,8 @@ export default function TeacherLoginScreen() {
         setError("This portal is for teachers only.");
         return;
       }
+      // Store the mustChangePassword flag in auth store so we can
+      // show prompts inside the app, but always land on dashboard first.
       login(
         {
           _id: user._id,
@@ -54,11 +56,7 @@ export default function TeacherLoginScreen() {
         accessToken,
         refreshToken
       );
-      if (mustChangePassword || user.mustChangePassword) {
-        router.replace("/(teacher)/profile?changePassword=1");
-      } else {
-        router.replace("/(teacher)/dashboard");
-      }
+      router.replace("/(teacher)/dashboard");
     } catch (err: any) {
       setError(err.response?.data?.message || "Invalid credentials");
     } finally {
