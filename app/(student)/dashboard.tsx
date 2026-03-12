@@ -12,6 +12,7 @@ import {
   FlatList,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useStudentAuthStore } from "@/store/studentAuthStore";
 import studentApi from "@/lib/studentApi";
 
@@ -195,47 +196,49 @@ export default function StudentDashboard() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
 
       {/* ── HEADER ── */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          {schoolLogo ? (
-            <Image source={{ uri: schoolLogo }} style={styles.logo} />
-          ) : (
-            <View style={styles.logoPlaceholder}>
-              <Text style={styles.logoPlaceholderText}>
-                {student?.schoolName?.charAt(0) ?? "S"}
-              </Text>
-            </View>
-          )}
-          <View style={{ flex: 1 }}>
-            <Text style={styles.welcomeText} numberOfLines={1}>
-              Welcome, {student?.firstName} {student?.lastName ?? ""}
-            </Text>
-            <Text style={styles.subText} numberOfLines={1}>
-              Class {student?.class} · Sec {student?.section} · {student?.schoolName}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.headerActions}>
-          {/* Global notification bell */}
-          <TouchableOpacity style={styles.iconBtn} onPress={handleBellPress} activeOpacity={0.7}>
-            <Text style={styles.iconBtnEmoji}>🔔</Text>
-            {unreadCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+      <SafeAreaView style={styles.header} edges={["top"]}>
+        <View style={styles.headerRow}>
+          <View style={styles.headerLeft}>
+            {schoolLogo ? (
+              <Image source={{ uri: schoolLogo }} style={styles.logo} />
+            ) : (
+              <View style={styles.logoPlaceholder}>
+                <Text style={styles.logoPlaceholderText}>
+                  {student?.schoolName?.charAt(0) ?? "S"}
+                </Text>
               </View>
             )}
-          </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.welcomeText} numberOfLines={1}>
+                Welcome, {student?.firstName} {student?.lastName ?? ""}
+              </Text>
+              <Text style={styles.subText} numberOfLines={1}>
+                Class {student?.class} · Sec {student?.section} · {student?.schoolName}
+              </Text>
+            </View>
+          </View>
 
-          {/* Logout */}
-          <TouchableOpacity
-            style={styles.logoutBtn}
-            onPress={() => { logout(); router.replace("/"); }}
-          >
-            <Text style={styles.logoutText}>Logout</Text>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            {/* Global notification bell */}
+            <TouchableOpacity style={styles.iconBtn} onPress={handleBellPress} activeOpacity={0.7}>
+              <Text style={styles.iconBtnEmoji}>🔔</Text>
+              {unreadCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Logout */}
+            <TouchableOpacity
+              style={styles.logoutBtn}
+              onPress={() => { logout(); router.replace("/"); }}
+            >
+              <Text style={styles.logoutText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </SafeAreaView>
 
       {/* ── GLOBAL NOTIFICATION PANEL ── */}
       <Modal visible={showNotifs} transparent animationType="slide">
@@ -345,19 +348,21 @@ export default function StudentDashboard() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8fafc" },
-  content: { paddingBottom: 40 },
+  content: { paddingBottom: 40, flexGrow: 1 },
 
   /* Header */
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 14,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 16,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: 8,
   },
   headerLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, minWidth: 0 },
@@ -445,12 +450,25 @@ const styles = StyleSheet.create({
   statChipDanger: { color: "#dc2626" },
   statChipLabel: { fontSize: 10, color: "#64748b", textAlign: "center", lineHeight: 14 },
 
-  /* Feature cards */
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 12, paddingHorizontal: 12, paddingTop: 4 },
+  /* Feature cards – same as teacher (2 per row) */
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 12,
+    paddingTop: 4,
+    paddingBottom: 24,
+    alignContent: "flex-start",
+    justifyContent: "space-between",
+  },
   card: {
-    width: "47%", flex: 1, minWidth: "47%",
-    borderRadius: 20, paddingVertical: 36, paddingHorizontal: 16,
-    alignItems: "center", justifyContent: "center", gap: 12,
+    width: "48%",
+    minHeight: 120,
+    borderRadius: 20,
+    paddingVertical: 36,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
   },
   cardIcon:  { fontSize: 40 },
   cardTitle: { fontSize: 16, fontWeight: "700", textAlign: "center" },

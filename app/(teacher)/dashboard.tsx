@@ -11,6 +11,7 @@ import {
   Modal,
   Pressable,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
 
@@ -152,56 +153,58 @@ export default function TeacherDashboard() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Header – same visual style as student dashboard */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          {schoolLogo ? (
-            <Image source={{ uri: schoolLogo }} style={styles.logo} />
-          ) : (
-            <View style={styles.logoPlaceholder}>
-              <Text style={styles.logoPlaceholderText}>
-                {schoolName?.charAt(0) ?? "S"}
-              </Text>
-            </View>
-          )}
-          <View style={{ flex: 1 }}>
-            <Text style={styles.welcomeText} numberOfLines={1}>
-              Welcome, {user?.name ?? "Teacher"}!
-            </Text>
-            <Text style={styles.subText} numberOfLines={1}>
-              Teacher · {schoolName ?? "School"}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={styles.iconButton}
-            onPress={() => {
-              setNotifOpen(true);
-            }}
-          >
-            <Text style={styles.iconButtonEmoji}>🔔</Text>
-            {!!notifItems.filter((n) => !n.read).length && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {Math.min(9, notifItems.filter((n) => !n.read).length)}
+      {/* Header (safe area) */}
+      <SafeAreaView style={styles.header} edges={["top"]}>
+        <View style={styles.headerRow}>
+          <View style={styles.headerLeft}>
+            {schoolLogo ? (
+              <Image source={{ uri: schoolLogo }} style={styles.logo} />
+            ) : (
+              <View style={styles.logoPlaceholder}>
+                <Text style={styles.logoPlaceholderText}>
+                  {schoolName?.charAt(0) ?? "S"}
                 </Text>
               </View>
             )}
-          </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.welcomeText} numberOfLines={1}>
+                Welcome, {user?.name ?? "Teacher"}!
+              </Text>
+              <Text style={styles.subText} numberOfLines={1}>
+                Teacher · {schoolName ?? "School"}
+              </Text>
+            </View>
+          </View>
 
-          <TouchableOpacity
-            style={styles.logoutBtn}
-            onPress={() => {
-              logout();
-              router.replace("/");
-            }}
-          >
-            <Text style={styles.logoutText}>Logout</Text>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => {
+                setNotifOpen(true);
+              }}
+            >
+              <Text style={styles.iconButtonEmoji}>🔔</Text>
+              {!!notifItems.filter((n) => !n.read).length && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {Math.min(9, notifItems.filter((n) => !n.read).length)}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.logoutBtn}
+              onPress={() => {
+                logout();
+                router.replace("/");
+              }}
+            >
+              <Text style={styles.logoutText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </SafeAreaView>
 
       {/* Notification modal */}
       <Modal
@@ -377,17 +380,20 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8fafc" },
   content: { paddingBottom: 40, flexGrow: 1 },
 
-  /* Header – same visual style as student dashboard */
+  /* Header */
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 14,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 16,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#fff",
     gap: 8,
   },
   headerLeft: {
@@ -471,26 +477,25 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
 
-  /* Feature cards grid – use minHeight so cards render on native Android */
+  /* Feature cards grid – 2 per row on phone */
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
     paddingHorizontal: 12,
     paddingTop: 4,
     paddingBottom: 24,
     alignContent: "flex-start",
+    justifyContent: "space-between",
   },
   card: {
-    width: "47%",
-    minWidth: "47%",
+    width: "48%",
     minHeight: 120,
     borderRadius: 20,
     paddingVertical: 36,
     paddingHorizontal: 16,
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
+    marginBottom: 12,
   },
   cardIcon: { fontSize: 40 },
   cardTitle: { fontSize: 16, fontWeight: "700", textAlign: "center" },
