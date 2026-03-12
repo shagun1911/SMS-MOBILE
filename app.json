@@ -15,14 +15,18 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.sms.portal"
+      "bundleIdentifier": "com.sms.portal",
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f172a"
       },
-      "package": "com.sms.portal"
+      "package": "com.sms.portal",
+      "runtimeVersion": "1.0.0"
     },
     "web": {
       "bundler": "metro",
@@ -43,6 +47,9 @@
       "eas": {
         "projectId": "d423b313-cd17-4c04-a406-70dffd435a69"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/d423b313-cd17-4c04-a406-70dffd435a69"
     }
   }
 }

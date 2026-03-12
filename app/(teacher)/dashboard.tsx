@@ -375,7 +375,7 @@ export default function TeacherDashboard() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8fafc" },
-  content: { paddingBottom: 40 },
+  content: { paddingBottom: 40, flexGrow: 1 },
 
   /* Header – same visual style as student dashboard */
   header: {
@@ -471,18 +471,20 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
 
-  /* Feature cards grid */
+  /* Feature cards grid – use minHeight so cards render on native Android */
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
     paddingHorizontal: 12,
     paddingTop: 4,
+    paddingBottom: 24,
+    alignContent: "flex-start",
   },
   card: {
     width: "47%",
-    flex: 1,
     minWidth: "47%",
+    minHeight: 120,
     borderRadius: 20,
     paddingVertical: 36,
     paddingHorizontal: 16,
