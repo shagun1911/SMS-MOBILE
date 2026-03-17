@@ -20,8 +20,13 @@ export default function LandingScreen() {
   useEffect(() => {
     (async () => {
       await new Promise((r) => setTimeout(r, 100));
-      if (useAuthStore.getState().isAuthenticated) {
-        router.replace("/(teacher)/dashboard");
+      const auth = useAuthStore.getState();
+      if (auth.isAuthenticated && auth.user) {
+        if (auth.user.role === "transport_manager") {
+          router.replace("/(transport)/dashboard");
+        } else {
+          router.replace("/(teacher)/dashboard");
+        }
         return;
       }
       if (useStudentAuthStore.getState().isAuthenticated) {
@@ -59,22 +64,34 @@ export default function LandingScreen() {
           <Text style={styles.title}>SMS Portal</Text>
           <Text style={styles.subtitle}>Choose how you want to sign in</Text>
           <View style={styles.buttonsRow}>
-            <TouchableOpacity
-              style={[styles.button, styles.teacherButton]}
-              onPress={() => router.push("/(auth)/teacher-login")}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.buttonLabel}>Teacher</Text>
-              <Text style={styles.buttonSubtext}>School staff login</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.button, styles.studentButton]}
-              onPress={() => router.push("/(auth)/student-login")}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.buttonLabel}>Student</Text>
-              <Text style={styles.buttonSubtext}>Student portal login</Text>
-            </TouchableOpacity>
+            <View style={styles.row}>
+              <TouchableOpacity
+                style={[styles.button, styles.teacherButton]}
+                onPress={() => router.push("/(auth)/teacher-login")}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.buttonLabel}>Teacher</Text>
+                <Text style={styles.buttonSubtext}>School staff login</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.studentButton]}
+                onPress={() => router.push("/(auth)/student-login")}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.buttonLabel}>Student</Text>
+                <Text style={styles.buttonSubtext}>Student portal login</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.row}>
+              <TouchableOpacity
+                style={[styles.button, styles.transportButton, styles.fullWidthButton]}
+                onPress={() => router.push("/(auth)/transport-login")}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.buttonLabel}>Transport</Text>
+                <Text style={styles.buttonSubtext}>Transport manager login</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </View>
@@ -131,9 +148,11 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   buttonsRow: {
+    gap: 16,
+  },
+  row: {
     flexDirection: "row",
     gap: 16,
-    justifyContent: "space-between",
   },
   button: {
     flex: 1,
@@ -148,14 +167,22 @@ const styles = StyleSheet.create({
   studentButton: {
     backgroundColor: "#6366F1",
   },
+  transportButton: {
+    backgroundColor: "#0f766e",
+  },
+  fullWidthButton: {
+    flex: 1,
+  },
   buttonLabel: {
     fontSize: 18,
     fontWeight: "600",
     color: "#fff",
+    textAlign: "center",
   },
   buttonSubtext: {
     fontSize: 13,
     color: "rgba(255,255,255,0.8)",
     marginTop: 4,
+    textAlign: "center",
   },
 });
