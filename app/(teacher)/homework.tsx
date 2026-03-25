@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import api from "@/lib/api";
 
 export default function TeacherHomeworkScreen() {
@@ -75,124 +76,129 @@ export default function TeacherHomeworkScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#059669" />
-      </View>
+      <SafeAreaView style={styles.safeArea} edges={["top"]}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#059669" />
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Homework</Text>
-        <TouchableOpacity style={styles.addBtn} onPress={() => setShowForm(true)}>
-          <Text style={styles.addBtnText}>+ Assign</Text>
-        </TouchableOpacity>
-      </View>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Homework</Text>
+          <TouchableOpacity style={styles.addBtn} onPress={() => setShowForm(true)}>
+            <Text style={styles.addBtnText}>+ Assign</Text>
+          </TouchableOpacity>
+        </View>
 
-      {homework.length === 0 ? (
-        <Text style={styles.empty}>No homework assigned yet.</Text>
-      ) : (
-        homework.map((hw: any) => (
-          <View key={hw._id} style={styles.card}>
-            <View style={styles.cardBody}>
-              <Text style={styles.badge}>
-                Class {hw.className}-{hw.section} · {hw.subject}
-              </Text>
-              <Text style={styles.cardTitle}>{hw.title}</Text>
-              <Text style={styles.cardDesc} numberOfLines={2}>{hw.description}</Text>
-              <Text style={styles.cardDue}>Due: {new Date(hw.dueDate).toLocaleDateString()}</Text>
-            </View>
-            <TouchableOpacity onPress={() => deleteHw(hw._id)}>
-              <Text style={styles.deleteText}>Delete</Text>
-            </TouchableOpacity>
-          </View>
-        ))
-      )}
-
-      <Modal visible={showForm} animationType="slide" transparent>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalOverlay}
-        >
-          <View style={styles.modalBox}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>New Homework</Text>
-              <TouchableOpacity onPress={() => setShowForm(false)}>
-                <Text style={styles.modalClose}>Cancel</Text>
+        {homework.length === 0 ? (
+          <Text style={styles.empty}>No homework assigned yet.</Text>
+        ) : (
+          homework.map((hw: any) => (
+            <View key={hw._id} style={styles.card}>
+              <View style={styles.cardBody}>
+                <Text style={styles.badge}>
+                  Class {hw.className}-{hw.section} · {hw.subject}
+                </Text>
+                <Text style={styles.cardTitle}>{hw.title}</Text>
+                <Text style={styles.cardDesc} numberOfLines={2}>{hw.description}</Text>
+                <Text style={styles.cardDue}>Due: {new Date(hw.dueDate).toLocaleDateString()}</Text>
+              </View>
+              <TouchableOpacity onPress={() => deleteHw(hw._id)}>
+                <Text style={styles.deleteText}>Delete</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView keyboardShouldPersistTaps="handled">
-              <Text style={styles.label}>Class</Text>
-              <TextInput
-                style={styles.input}
-                value={form.className}
-                onChangeText={(v) => setForm({ ...form, className: v, section: "" })}
-                placeholder="e.g. 10"
-                placeholderTextColor="#94a3b8"
-              />
-              <Text style={styles.label}>Section</Text>
-              <TextInput
-                style={styles.input}
-                value={form.section}
-                onChangeText={(v) => setForm({ ...form, section: v })}
-                placeholder="e.g. A"
-                placeholderTextColor="#94a3b8"
-                editable={sections.length > 0}
-              />
-              <Text style={styles.label}>Subject</Text>
-              <TextInput
-                style={styles.input}
-                value={form.subject}
-                onChangeText={(v) => setForm({ ...form, subject: v })}
-                placeholder="e.g. Mathematics"
-                placeholderTextColor="#94a3b8"
-              />
-              <Text style={styles.label}>Title</Text>
-              <TextInput
-                style={styles.input}
-                value={form.title}
-                onChangeText={(v) => setForm({ ...form, title: v })}
-                placeholder="Homework title"
-                placeholderTextColor="#94a3b8"
-              />
-              <Text style={styles.label}>Description</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                value={form.description}
-                onChangeText={(v) => setForm({ ...form, description: v })}
-                placeholder="Description..."
-                placeholderTextColor="#94a3b8"
-                multiline
-              />
-              <Text style={styles.label}>Due date</Text>
-              <TextInput
-                style={styles.input}
-                value={form.dueDate}
-                onChangeText={(v) => setForm({ ...form, dueDate: v })}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#94a3b8"
-              />
-              <TouchableOpacity
-                style={[styles.submitBtn, submitting && styles.submitDisabled]}
-                onPress={submit}
-                disabled={submitting}
-              >
-                {submitting ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.submitBtnText}>Assign</Text>
-                )}
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-    </ScrollView>
+          ))
+        )}
+
+        <Modal visible={showForm} animationType="slide" transparent>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.modalOverlay}
+          >
+            <View style={styles.modalBox}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>New Homework</Text>
+                <TouchableOpacity onPress={() => setShowForm(false)}>
+                  <Text style={styles.modalClose}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView keyboardShouldPersistTaps="handled">
+                <Text style={styles.label}>Class</Text>
+                <TextInput
+                  style={styles.input}
+                  value={form.className}
+                  onChangeText={(v) => setForm({ ...form, className: v, section: "" })}
+                  placeholder="e.g. 10"
+                  placeholderTextColor="#94a3b8"
+                />
+                <Text style={styles.label}>Section</Text>
+                <TextInput
+                  style={styles.input}
+                  value={form.section}
+                  onChangeText={(v) => setForm({ ...form, section: v })}
+                  placeholder="e.g. A"
+                  placeholderTextColor="#94a3b8"
+                  editable={sections.length > 0}
+                />
+                <Text style={styles.label}>Subject</Text>
+                <TextInput
+                  style={styles.input}
+                  value={form.subject}
+                  onChangeText={(v) => setForm({ ...form, subject: v })}
+                  placeholder="e.g. Mathematics"
+                  placeholderTextColor="#94a3b8"
+                />
+                <Text style={styles.label}>Title</Text>
+                <TextInput
+                  style={styles.input}
+                  value={form.title}
+                  onChangeText={(v) => setForm({ ...form, title: v })}
+                  placeholder="Homework title"
+                  placeholderTextColor="#94a3b8"
+                />
+                <Text style={styles.label}>Description</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={form.description}
+                  onChangeText={(v) => setForm({ ...form, description: v })}
+                  placeholder="Description..."
+                  placeholderTextColor="#94a3b8"
+                  multiline
+                />
+                <Text style={styles.label}>Due date</Text>
+                <TextInput
+                  style={styles.input}
+                  value={form.dueDate}
+                  onChangeText={(v) => setForm({ ...form, dueDate: v })}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor="#94a3b8"
+                />
+                <TouchableOpacity
+                  style={[styles.submitBtn, submitting && styles.submitDisabled]}
+                  onPress={submit}
+                  disabled={submitting}
+                >
+                  {submitting ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.submitBtnText}>Assign</Text>
+                  )}
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: "#f8fafc" },
   container: { flex: 1, backgroundColor: "#f8fafc" },
   content: { padding: 16, paddingBottom: 32 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },

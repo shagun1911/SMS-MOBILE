@@ -8,7 +8,14 @@ import {
   TouchableOpacity,
   Modal,
   Pressable,
+  Dimensions,
 } from "react-native";
+
+const SCREEN_HEIGHT = Dimensions.get("window").height;
+/** Modal card max height; ScrollView gets a fixed cap so it scrolls on Android/iOS. */
+const MODAL_MAX_HEIGHT = Math.round(SCREEN_HEIGHT * 0.8);
+const MODAL_SCROLL_MAX_HEIGHT = MODAL_MAX_HEIGHT - 32;
+import { SafeAreaView } from "react-native-safe-area-context";
 import api from "@/lib/api";
 
 type Bus = {
@@ -66,73 +73,81 @@ export default function TeacherBusRoutes() {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#0f766e" />
-        <Text style={styles.loadingText}>Loading bus routes...</Text>
-      </View>
+      <SafeAreaView style={styles.safeArea} edges={["top"]}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#0f766e" />
+          <Text style={styles.loadingText}>Loading bus routes...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>{error}</Text>
-      </View>
+      <SafeAreaView style={styles.safeArea} edges={["top"]}>
+        <View style={styles.center}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   if (!buses.length) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.emptyTitle}>No buses assigned to any route.</Text>
-        <Text style={styles.emptySub}>
-          Once the school admin configures transport in the web app, buses and routes will appear here.
-        </Text>
-      </View>
+      <SafeAreaView style={styles.safeArea} edges={["top"]}>
+        <View style={styles.center}>
+          <Text style={styles.emptyTitle}>No buses assigned to any route.</Text>
+          <Text style={styles.emptySub}>
+            Once the school admin configures transport in the web app, buses and routes will appear here.
+          </Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
     <>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Bus Routes</Text>
-        {buses.map((bus) => (
-          <TouchableOpacity
-            key={bus._id}
-            style={styles.card}
-            activeOpacity={0.85}
-            onPress={() => openDetails(bus._id)}
-          >
-            <Text style={styles.routeName}>{bus.routeName || "Unnamed Route"}</Text>
-            <Text style={styles.meta}>
-              Vehicle:{" "}
-              <Text style={styles.metaStrong}>
-                {bus.busNumber || bus.vehicleNumber || "N/A"}
-              </Text>
-            </Text>
-            <Text style={styles.meta}>
-              Reg:{" "}
-              <Text style={styles.metaStrong}>
-                {bus.registrationNumber || "N/A"}
-              </Text>
-            </Text>
-            {bus.capacity ? (
+      <SafeAreaView style={styles.safeArea} edges={["top"]}>
+        <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+          <Text style={styles.title}>Bus Routes</Text>
+          {buses.map((bus) => (
+            <TouchableOpacity
+              key={bus._id}
+              style={styles.card}
+              activeOpacity={0.85}
+              onPress={() => openDetails(bus._id)}
+            >
+              <Text style={styles.routeName}>{bus.routeName || "Unnamed Route"}</Text>
               <Text style={styles.meta}>
-                Capacity: <Text style={styles.metaStrong}>{bus.capacity}</Text>
-              </Text>
-            ) : null}
-            {bus.driverName || bus.driverPhone ? (
-              <Text style={styles.meta}>
-                Driver:{" "}
+                Vehicle:{" "}
                 <Text style={styles.metaStrong}>
-                  {bus.driverName || "N/A"}
-                  {bus.driverPhone ? ` · ${bus.driverPhone}` : ""}
+                  {bus.busNumber || bus.vehicleNumber || "N/A"}
                 </Text>
               </Text>
-            ) : null}
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+              <Text style={styles.meta}>
+                Reg:{" "}
+                <Text style={styles.metaStrong}>
+                  {bus.registrationNumber || "N/A"}
+                </Text>
+              </Text>
+              {bus.capacity ? (
+                <Text style={styles.meta}>
+                  Capacity: <Text style={styles.metaStrong}>{bus.capacity}</Text>
+                </Text>
+              ) : null}
+              {bus.driverName || bus.driverPhone ? (
+                <Text style={styles.meta}>
+                  Driver:{" "}
+                  <Text style={styles.metaStrong}>
+                    {bus.driverName || "N/A"}
+                    {bus.driverPhone ? ` · ${bus.driverPhone}` : ""}
+                  </Text>
+                </Text>
+              ) : null}
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </SafeAreaView>
 
       <Modal
         visible={detailsOpen}
@@ -140,16 +155,16 @@ export default function TeacherBusRoutes() {
         animationType="slide"
         onRequestClose={() => setDetailsOpen(false)}
       >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => setDetailsOpen(false)}
-        >
+        <View style={styles.modalBackdrop}>
           <Pressable
-            style={styles.modalCard}
-            onPress={(e) => e.stopPropagation()}
-          >
+            style={StyleSheet.absoluteFill}
+            onPress={() => setDetailsOpen(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Close bus details"
+          />
+          <View style={[styles.modalCard, { maxHeight: MODAL_MAX_HEIGHT }]}>
             {detailsLoading ? (
-              <View style={styles.center}>
+              <View style={styles.modalInnerCenter}>
                 <ActivityIndicator size="large" color="#0f766e" />
               </View>
             ) : detailsError ? (
@@ -158,9 +173,12 @@ export default function TeacherBusRoutes() {
               <Text style={styles.errorText}>No details available.</Text>
             ) : (
               <ScrollView
-                style={{ maxHeight: "100%" }}
-                contentContainerStyle={{ paddingBottom: 12 }}
+                style={{ maxHeight: MODAL_SCROLL_MAX_HEIGHT }}
+                contentContainerStyle={styles.modalScrollContent}
                 keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled
+                showsVerticalScrollIndicator
+                bounces
               >
                 <Text style={styles.modalTitle}>Bus details</Text>
                 <Text style={styles.meta}>
@@ -203,7 +221,7 @@ export default function TeacherBusRoutes() {
                   Students on this bus ({students.length})
                 </Text>
                 {students.length === 0 ? (
-                  <Text style={styles.emptySub}>
+                  <Text style={[styles.emptySub, styles.modalEmptyStudents]}>
                     No students are assigned to this bus.
                   </Text>
                 ) : (
@@ -224,14 +242,15 @@ export default function TeacherBusRoutes() {
                 )}
               </ScrollView>
             )}
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: "#f8fafc" },
   container: { flex: 1, backgroundColor: "#f8fafc" },
   content: { padding: 16, paddingBottom: 32 },
   title: {
@@ -303,11 +322,21 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     width: "100%",
-    maxHeight: "80%",
     borderRadius: 18,
     backgroundColor: "#ffffff",
     padding: 16,
+    overflow: "hidden",
+    zIndex: 1,
+    elevation: 8,
   },
+  modalScrollContent: { paddingBottom: 16 },
+  modalInnerCenter: {
+    minHeight: 120,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 24,
+  },
+  modalEmptyStudents: { textAlign: "left", alignSelf: "stretch" },
   modalTitle: {
     fontSize: 18,
     fontWeight: "700",

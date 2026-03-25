@@ -7,6 +7,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import api from "@/lib/api";
 
 export default function TeacherMarksScreen() {
@@ -32,60 +33,65 @@ export default function TeacherMarksScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#059669" />
-      </View>
+      <SafeAreaView style={styles.safeArea} edges={["top"]}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#059669" />
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Exams & Marks</Text>
-      <Text style={styles.subtitle}>Select an exam to enter marks or view results</Text>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <Text style={styles.title}>Exams & Marks</Text>
+        <Text style={styles.subtitle}>Select an exam to enter marks or view results</Text>
 
-      {exams.length === 0 ? (
-        <Text style={styles.empty}>No exams created yet. Ask the admin to create an exam first.</Text>
-      ) : (
-        <>
-          {upcoming.length > 0 && (
-            <>
-              <Text style={styles.sectionTitle}>Upcoming</Text>
-              {upcoming.map((exam: any) => (
-                <View key={exam._id} style={styles.card}>
-                  <Text style={styles.cardBadge}>{exam.examType ?? exam.type ?? "Exam"}</Text>
-                  <Text style={styles.cardTitle}>{exam.name ?? exam.title ?? "Examination"}</Text>
-                  {exam.startDate && (
-                    <Text style={styles.cardMeta}>
-                      {new Date(exam.startDate).toLocaleDateString()}
-                      {exam.endDate && ` – ${new Date(exam.endDate).toLocaleDateString()}`}
-                    </Text>
-                  )}
-                  <Text style={styles.cardHint}>Enter marks and merit list from school admin dashboard.</Text>
-                </View>
-              ))}
-            </>
-          )}
-          {completed.length > 0 && (
-            <>
-              <Text style={styles.sectionTitle}>Completed</Text>
-              {completed.map((exam: any) => (
-                <View key={exam._id} style={styles.card}>
-                  <Text style={styles.cardBadge}>{exam.examType ?? exam.type ?? "Exam"}</Text>
-                  <Text style={styles.cardTitle}>{exam.name ?? exam.title ?? "Examination"}</Text>
-                  {exam.startDate && (
-                    <Text style={styles.cardMeta}>{new Date(exam.startDate).toLocaleDateString()}</Text>
-                  )}
-                </View>
-              ))}
-            </>
-          )}
-        </>
-      )}
-    </ScrollView>
+        {exams.length === 0 ? (
+          <Text style={styles.empty}>No exams created yet. Ask the admin to create an exam first.</Text>
+        ) : (
+          <>
+            {upcoming.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>Upcoming</Text>
+                {upcoming.map((exam: any) => (
+                  <View key={exam._id} style={styles.card}>
+                    <Text style={styles.cardBadge}>{exam.examType ?? exam.type ?? "Exam"}</Text>
+                    <Text style={styles.cardTitle}>{exam.name ?? exam.title ?? "Examination"}</Text>
+                    {exam.startDate && (
+                      <Text style={styles.cardMeta}>
+                        {new Date(exam.startDate).toLocaleDateString()}
+                        {exam.endDate && ` – ${new Date(exam.endDate).toLocaleDateString()}`}
+                      </Text>
+                    )}
+                    <Text style={styles.cardHint}>Enter marks and merit list from school admin dashboard.</Text>
+                  </View>
+                ))}
+              </>
+            )}
+            {completed.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>Completed</Text>
+                {completed.map((exam: any) => (
+                  <View key={exam._id} style={styles.card}>
+                    <Text style={styles.cardBadge}>{exam.examType ?? exam.type ?? "Exam"}</Text>
+                    <Text style={styles.cardTitle}>{exam.name ?? exam.title ?? "Examination"}</Text>
+                    {exam.startDate && (
+                      <Text style={styles.cardMeta}>{new Date(exam.startDate).toLocaleDateString()}</Text>
+                    )}
+                  </View>
+                ))}
+              </>
+            )}
+          </>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: "#f8fafc" },
   container: { flex: 1, backgroundColor: "#f8fafc" },
   content: { padding: 16, paddingBottom: 32 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },

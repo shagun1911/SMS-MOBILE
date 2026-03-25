@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import api from "@/lib/api";
 
 type SalaryRecord = {
@@ -34,29 +35,35 @@ export default function TeacherSalaryScreen() {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#16a34a" />
-        <Text style={styles.centerText}>Loading salary history...</Text>
-      </View>
+      <SafeAreaView style={styles.safeArea} edges={["top"]}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#16a34a" />
+          <Text style={styles.centerText}>Loading salary history...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>{error}</Text>
-      </View>
+      <SafeAreaView style={styles.safeArea} edges={["top"]}>
+        <View style={styles.center}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   if (!records.length) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.emptyTitle}>No salary payments recorded yet.</Text>
-        <Text style={styles.emptySub}>
-          Once payroll is generated and payments are recorded for you, they will appear here.
-        </Text>
-      </View>
+      <SafeAreaView style={styles.safeArea} edges={["top"]}>
+        <View style={styles.center}>
+          <Text style={styles.emptyTitle}>No salary payments recorded yet.</Text>
+          <Text style={styles.emptySub}>
+            Once payroll is generated and payments are recorded for you, they will appear here.
+          </Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -71,70 +78,73 @@ export default function TeacherSalaryScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Salary History</Text>
-      <Text style={styles.subtitle}>All salary transactions recorded for your account.</Text>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <Text style={styles.title}>Salary History</Text>
+        <Text style={styles.subtitle}>All salary transactions recorded for your account.</Text>
 
-      {records.map((r) => {
-        const paid = r.paidAmount || 0;
-        const due = Math.max(0, (r.netSalary || 0) - paid);
-        return (
-          <View key={r._id} style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardMonth}>
-                {r.month} {r.year}
-              </Text>
-              <View
-                style={[
-                  styles.statusPill,
-                  r.status === "paid"
-                    ? styles.statusPaid
-                    : r.status === "partial"
-                    ? styles.statusPartial
-                    : r.status === "hold"
-                    ? styles.statusHold
-                    : styles.statusPending,
-                ]}
-              >
-                <Text style={styles.statusText}>{prettyStatus(r.status)}</Text>
+        {records.map((r) => {
+          const paid = r.paidAmount || 0;
+          const due = Math.max(0, (r.netSalary || 0) - paid);
+          return (
+            <View key={r._id} style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardMonth}>
+                  {r.month} {r.year}
+                </Text>
+                <View
+                  style={[
+                    styles.statusPill,
+                    r.status === "paid"
+                      ? styles.statusPaid
+                      : r.status === "partial"
+                      ? styles.statusPartial
+                      : r.status === "hold"
+                      ? styles.statusHold
+                      : styles.statusPending,
+                  ]}
+                >
+                  <Text style={styles.statusText}>{prettyStatus(r.status)}</Text>
+                </View>
+              </View>
+              <View style={styles.row}>
+                <Text style={styles.label}>Net salary</Text>
+                <Text style={styles.value}>{fmt(r.netSalary)}</Text>
+              </View>
+              <View style={styles.row}>
+                <Text style={styles.label}>Paid</Text>
+                <Text style={[styles.value, styles.valuePaid]}>{fmt(paid)}</Text>
+              </View>
+              <View style={styles.row}>
+                <Text style={styles.label}>Remaining</Text>
+                <Text style={[styles.value, due > 0 ? styles.valueDue : styles.valuePaid]}>
+                  {fmt(due)}
+                </Text>
+              </View>
+              <View style={styles.metaRow}>
+                <Text style={styles.meta}>
+                  {r.paymentDate
+                    ? `Last payment: ${new Date(r.paymentDate).toLocaleDateString("en-IN", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}`
+                    : "No payment date"}
+                </Text>
+                {r.paymentMode ? (
+                  <Text style={styles.meta}>Mode: {r.paymentMode}</Text>
+                ) : null}
               </View>
             </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Net salary</Text>
-              <Text style={styles.value}>{fmt(r.netSalary)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Paid</Text>
-              <Text style={[styles.value, styles.valuePaid]}>{fmt(paid)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.label}>Remaining</Text>
-              <Text style={[styles.value, due > 0 ? styles.valueDue : styles.valuePaid]}>
-                {fmt(due)}
-              </Text>
-            </View>
-            <View style={styles.metaRow}>
-              <Text style={styles.meta}>
-                {r.paymentDate
-                  ? `Last payment: ${new Date(r.paymentDate).toLocaleDateString("en-IN", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    })}`
-                  : "No payment date"}
-              </Text>
-              {r.paymentMode ? (
-                <Text style={styles.meta}>Mode: {r.paymentMode}</Text>
-              ) : null}
-            </View>
-          </View>
-        );
-      })}
-    </ScrollView>
+          );
+        })}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: "#f8fafc" },
   container: { flex: 1, backgroundColor: "#f8fafc" },
   content: { padding: 16, paddingBottom: 32 },
   center: {

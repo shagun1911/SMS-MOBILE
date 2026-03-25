@@ -9,6 +9,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import api from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 
@@ -73,111 +74,114 @@ export default function TeacherProfileScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#059669" />
-      </View>
+      <SafeAreaView style={styles.safeArea} edges={["top"]}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#059669" />
+        </View>
+      </SafeAreaView>
     );
   }
 
   const data = profile || user;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>My Profile</Text>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <Text style={styles.title}>My Profile</Text>
 
-      {forceChange && (
-        <View style={styles.alert}>
-          <Text style={styles.alertTitle}>Change your password</Text>
-          <Text style={styles.alertText}>
-            Your password was set by the admin. Please change it for security.
+        {forceChange && (
+          <View style={styles.alert}>
+            <Text style={styles.alertTitle}>Change your password</Text>
+            <Text style={styles.alertText}>
+              Your password was set by the admin. Please change it for security.
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Personal Information</Text>
+          <Text style={styles.rowLabel}>Name</Text>
+          <Text style={styles.rowValue}>{data?.name ?? "—"}</Text>
+          <Text style={styles.rowLabel}>Email</Text>
+          <Text style={styles.rowValue}>{data?.email ?? "—"}</Text>
+          <Text style={styles.rowLabel}>Role</Text>
+          <Text style={styles.rowValue}>{(data?.role ?? "").replace("_", " ")}</Text>
+          <Text style={styles.rowLabel}>Joining Date</Text>
+          <Text style={styles.rowValue}>
+            {data?.joiningDate
+              ? new Date(data.joiningDate).toLocaleDateString("en-IN", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })
+              : "—"}
           </Text>
         </View>
-      )}
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Personal Information</Text>
-        <Text style={styles.rowLabel}>Name</Text>
-        <Text style={styles.rowValue}>{data?.name ?? "—"}</Text>
-        <Text style={styles.rowLabel}>Email</Text>
-        <Text style={styles.rowValue}>{data?.email ?? "—"}</Text>
-        <Text style={styles.rowLabel}>Role</Text>
-        <Text style={styles.rowValue}>{(data?.role ?? "").replace("_", " ")}</Text>
-        <Text style={styles.rowLabel}>Joining Date</Text>
-        <Text style={styles.rowValue}>
-          {data?.joiningDate
-            ? new Date(data.joiningDate).toLocaleDateString("en-IN", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })
-            : "—"}
-        </Text>
-      </View>
-
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>Change Password</Text>
-          {!showChangePw && (
-            <TouchableOpacity onPress={() => setShowChangePw(true)}>
-              <Text style={styles.link}>Change</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        {showChangePw ? (
-          <>
-            <TextInput
-              style={styles.input}
-              placeholder="Current password"
-              placeholderTextColor="#94a3b8"
-              value={currentPw}
-              onChangeText={setCurrentPw}
-              secureTextEntry
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="New password"
-              placeholderTextColor="#94a3b8"
-              value={newPw}
-              onChangeText={setNewPw}
-              secureTextEntry
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Confirm new password"
-              placeholderTextColor="#94a3b8"
-              value={confirmPw}
-              onChangeText={setConfirmPw}
-              secureTextEntry
-            />
-            {message ? <Text style={styles.error}>{message}</Text> : null}
-            <TouchableOpacity
-              style={[styles.submitBtn, submitting && styles.submitDisabled]}
-              onPress={handleChangePassword}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.submitBtnText}>Save Password</Text>
-              )}
-            </TouchableOpacity>
-            {!forceChange && (
-              <TouchableOpacity onPress={() => setShowChangePw(false)} style={styles.cancelBtn}>
-                <Text style={styles.cancelText}>Cancel</Text>
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>Change Password</Text>
+            {!showChangePw && (
+              <TouchableOpacity onPress={() => setShowChangePw(true)}>
+                <Text style={styles.link}>Change</Text>
               </TouchableOpacity>
             )}
-          </>
-        ) : (
-          <Text style={styles.muted}>Your password is set. Click "Change" to update it.</Text>
-        )}
-      </View>
-
-      
-    </ScrollView>
+          </View>
+          {showChangePw ? (
+            <>
+              <TextInput
+                style={styles.input}
+                placeholder="Current password"
+                placeholderTextColor="#94a3b8"
+                value={currentPw}
+                onChangeText={setCurrentPw}
+                secureTextEntry
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="New password"
+                placeholderTextColor="#94a3b8"
+                value={newPw}
+                onChangeText={setNewPw}
+                secureTextEntry
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Confirm new password"
+                placeholderTextColor="#94a3b8"
+                value={confirmPw}
+                onChangeText={setConfirmPw}
+                secureTextEntry
+              />
+              {message ? <Text style={styles.error}>{message}</Text> : null}
+              <TouchableOpacity
+                style={[styles.submitBtn, submitting && styles.submitDisabled]}
+                onPress={handleChangePassword}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.submitBtnText}>Save Password</Text>
+                )}
+              </TouchableOpacity>
+              {!forceChange && (
+                <TouchableOpacity onPress={() => setShowChangePw(false)} style={styles.cancelBtn}>
+                  <Text style={styles.cancelText}>Cancel</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          ) : (
+            <Text style={styles.muted}>Your password is set. Click "Change" to update it.</Text>
+          )}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: "#f8fafc" },
   container: { flex: 1, backgroundColor: "#f8fafc" },
   content: { padding: 16, paddingBottom: 32 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
