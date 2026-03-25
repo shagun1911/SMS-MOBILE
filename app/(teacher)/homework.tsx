@@ -10,23 +10,26 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import api from "@/lib/api";
 
 export default function TeacherHomeworkScreen() {
   const [homework, setHomework] = useState<any[]>([]);
-  const [classes, setClasses] = useState<any[]>([]);
+  const [classOptions, setClassOptions] = useState<string[]>([]);
+  const [sectionsByClass, setSectionsByClass] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showClassPicker, setShowClassPicker] = useState(false);
+  const [showSectionPicker, setShowSectionPicker] = useState(false);
   const [form, setForm] = useState({
     className: "",
     section: "",
     subject: "",
     title: "",
     description: "",
-    dueDate: "",
     attachmentUrl: "",
   });
 
@@ -37,8 +40,31 @@ export default function TeacherHomeworkScreen() {
         api.get("/classes"),
       ]);
       setHomework(hRes.data.data ?? []);
-      setClasses(cRes.data.data ?? []);
-    } catch (_) {}
+      const classesRaw = cRes.data.data ?? [];
+      const sectionMap: Record<string, Set<string>> = {};
+      for (const cls of classesRaw) {
+        const className = String(cls.className ?? "").trim();
+        const section = String(cls.section ?? "").trim().toUpperCase();
+        if (!className || !section) continue;
+        if (!sectionMap[className]) sectionMap[className] = new Set<string>();
+        sectionMap[className].add(section);
+      }
+
+      const classNames = Object.keys(sectionMap).sort((a, b) =>
+        a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+      );
+      const normalizedMap: Record<string, string[]> = {};
+      for (const className of classNames) {
+        normalizedMap[className] = Array.from(sectionMap[className]).sort((a, b) =>
+          a.localeCompare(b, undefined, { sensitivity: "base" })
+        );
+      }
+
+      setClassOptions(classNames);
+      setSectionsByClass(normalizedMap);
+    } catch (_) {
+      Alert.alert("Error", "Failed to load homework data.");
+    }
     finally {
       setLoading(false);
     }
@@ -48,20 +74,31 @@ export default function TeacherHomeworkScreen() {
     load();
   }, []);
 
-  const selectedClass = classes.find((c: any) => c.className === form.className);
-  const sections = selectedClass?.sections ?? [];
+  const sections = sectionsByClass[form.className] ?? [];
 
   const submit = async () => {
-    if (!form.className || !form.section || !form.subject || !form.title || !form.description || !form.dueDate) {
+    if (!form.className || !form.section || !form.subject || !form.title || !form.description) {
+      Alert.alert("Missing fields", "Please fill all required fields.");
       return;
     }
     setSubmitting(true);
     try {
-      await api.post("/homework", form);
+      const fallbackDueDate = new Date();
+      const payload = {
+        ...form,
+        section: form.section.toUpperCase(),
+        // Backward compatibility for deployed backends that still require dueDate.
+        dueDate: fallbackDueDate.toISOString().slice(0, 10),
+      };
+      await api.post("/homework", payload);
       setShowForm(false);
-      setForm({ className: "", section: "", subject: "", title: "", description: "", dueDate: "", attachmentUrl: "" });
+      setForm({ className: "", section: "", subject: "", title: "", description: "", attachmentUrl: "" });
+      Alert.alert("Assigned", "Homework assigned to selected class and section students.");
       load();
-    } catch (_) {}
+    } catch (error: any) {
+      const message = error?.response?.data?.message ?? "Failed to assign homework.";
+      Alert.alert("Assign failed", message);
+    }
     finally {
       setSubmitting(false);
     }
@@ -105,7 +142,11 @@ export default function TeacherHomeworkScreen() {
                 </Text>
                 <Text style={styles.cardTitle}>{hw.title}</Text>
                 <Text style={styles.cardDesc} numberOfLines={2}>{hw.description}</Text>
-                <Text style={styles.cardDue}>Due: {new Date(hw.dueDate).toLocaleDateString()}</Text>
+                {hw.dueDate ? (
+                  <Text style={styles.cardDue}>Due: {new Date(hw.dueDate).toLocaleDateString()}</Text>
+                ) : (
+                  <Text style={styles.cardDue}>No due date</Text>
+                )}
               </View>
               <TouchableOpacity onPress={() => deleteHw(hw._id)}>
                 <Text style={styles.deleteText}>Delete</Text>
@@ -128,22 +169,29 @@ export default function TeacherHomeworkScreen() {
               </View>
               <ScrollView keyboardShouldPersistTaps="handled">
                 <Text style={styles.label}>Class</Text>
-                <TextInput
-                  style={styles.input}
-                  value={form.className}
-                  onChangeText={(v) => setForm({ ...form, className: v, section: "" })}
-                  placeholder="e.g. 10"
-                  placeholderTextColor="#94a3b8"
-                />
+                <TouchableOpacity
+                  style={styles.selectInput}
+                  activeOpacity={0.8}
+                  onPress={() => setShowClassPicker(true)}
+                >
+                  <Text style={form.className ? styles.selectText : styles.selectPlaceholder}>
+                    {form.className || "Select class"}
+                  </Text>
+                </TouchableOpacity>
                 <Text style={styles.label}>Section</Text>
-                <TextInput
-                  style={styles.input}
-                  value={form.section}
-                  onChangeText={(v) => setForm({ ...form, section: v })}
-                  placeholder="e.g. A"
-                  placeholderTextColor="#94a3b8"
-                  editable={sections.length > 0}
-                />
+                <TouchableOpacity
+                  style={[styles.selectInput, !form.className && styles.selectDisabled]}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    if (!form.className) return;
+                    setShowSectionPicker(true);
+                  }}
+                  disabled={!form.className}
+                >
+                  <Text style={form.section ? styles.selectText : styles.selectPlaceholder}>
+                    {form.section || "Select section"}
+                  </Text>
+                </TouchableOpacity>
                 <Text style={styles.label}>Subject</Text>
                 <TextInput
                   style={styles.input}
@@ -169,14 +217,6 @@ export default function TeacherHomeworkScreen() {
                   placeholderTextColor="#94a3b8"
                   multiline
                 />
-                <Text style={styles.label}>Due date</Text>
-                <TextInput
-                  style={styles.input}
-                  value={form.dueDate}
-                  onChangeText={(v) => setForm({ ...form, dueDate: v })}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#94a3b8"
-                />
                 <TouchableOpacity
                   style={[styles.submitBtn, submitting && styles.submitDisabled]}
                   onPress={submit}
@@ -191,6 +231,56 @@ export default function TeacherHomeworkScreen() {
               </ScrollView>
             </View>
           </KeyboardAvoidingView>
+        </Modal>
+
+        <Modal visible={showClassPicker} animationType="slide" transparent>
+          <View style={styles.pickerOverlay}>
+            <View style={styles.pickerBox}>
+              <Text style={styles.pickerTitle}>Select Class</Text>
+              <ScrollView>
+                {classOptions.map((className) => (
+                  <TouchableOpacity
+                    key={className}
+                    style={styles.pickerRow}
+                    onPress={() => {
+                      setForm({ ...form, className, section: "" });
+                      setShowClassPicker(false);
+                    }}
+                  >
+                    <Text style={styles.pickerRowText}>Class {className}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <TouchableOpacity style={styles.pickerCloseBtn} onPress={() => setShowClassPicker(false)}>
+                <Text style={styles.pickerCloseText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal visible={showSectionPicker} animationType="slide" transparent>
+          <View style={styles.pickerOverlay}>
+            <View style={styles.pickerBox}>
+              <Text style={styles.pickerTitle}>Select Section</Text>
+              <ScrollView>
+                {sections.map((section) => (
+                  <TouchableOpacity
+                    key={section}
+                    style={styles.pickerRow}
+                    onPress={() => {
+                      setForm({ ...form, section });
+                      setShowSectionPicker(false);
+                    }}
+                  >
+                    <Text style={styles.pickerRowText}>Section {section}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <TouchableOpacity style={styles.pickerCloseBtn} onPress={() => setShowSectionPicker(false)}>
+                <Text style={styles.pickerCloseText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </Modal>
       </ScrollView>
     </SafeAreaView>
@@ -240,8 +330,65 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
   },
+  selectInput: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  selectText: {
+    fontSize: 16,
+    color: "#0f172a",
+  },
+  selectPlaceholder: {
+    fontSize: 16,
+    color: "#94a3b8",
+  },
+  selectDisabled: {
+    opacity: 0.6,
+  },
   textArea: { minHeight: 80 },
   submitBtn: { backgroundColor: "#059669", padding: 14, borderRadius: 10, alignItems: "center", marginTop: 8 },
   submitDisabled: { opacity: 0.7 },
   submitBtnText: { color: "#fff", fontWeight: "600" },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  pickerBox: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "65%",
+    padding: 20,
+  },
+  pickerTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginBottom: 12,
+  },
+  pickerRow: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  pickerRowText: {
+    fontSize: 16,
+    color: "#0f172a",
+  },
+  pickerCloseBtn: {
+    marginTop: 12,
+    alignItems: "center",
+    paddingVertical: 10,
+    backgroundColor: "#f1f5f9",
+    borderRadius: 10,
+  },
+  pickerCloseText: {
+    color: "#0f172a",
+    fontWeight: "600",
+  },
 });

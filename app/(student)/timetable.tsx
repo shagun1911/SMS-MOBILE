@@ -11,6 +11,15 @@ import studentApi from "@/lib/studentApi";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+const DAY_NAME_TO_NUM: Record<string, number> = {
+  Monday: 1,
+  Tuesday: 2,
+  Wednesday: 3,
+  Thursday: 4,
+  Friday: 5,
+  Saturday: 6,
+};
+
 export default function StudentTimetableScreen() {
   const student = useStudentAuthStore((s) => s.student);
   const [timetable, setTimetable] = useState<any[]>([]);
@@ -23,9 +32,11 @@ export default function StudentTimetableScreen() {
     }
     (async () => {
       try {
-        const res = await studentApi.get(
-          `/timetable?class=${student.class}&section=${student.section}`
-        );
+        const params = new URLSearchParams({
+          className: String(student.class),
+          section: String(student.section),
+        });
+        const res = await studentApi.get(`/timetable?${params.toString()}`);
         setTimetable(res.data.data ?? []);
       } catch (_) {}
       finally {
@@ -34,7 +45,10 @@ export default function StudentTimetableScreen() {
     })();
   }, [student?.class, student?.section]);
 
-  const getDay = (dayName: string) => timetable.find((t: any) => t.dayOfWeek === dayName);
+  const getDay = (dayName: string) => {
+    const n = DAY_NAME_TO_NUM[dayName];
+    return timetable.find((t: any) => Number(t.dayOfWeek) === n);
+  };
 
   if (loading) {
     return (

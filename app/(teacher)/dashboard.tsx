@@ -10,6 +10,8 @@ import {
   Image,
   Modal,
   Pressable,
+  Platform,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuthStore } from "@/store/authStore";
@@ -18,6 +20,8 @@ import api from "@/lib/api";
 export default function TeacherDashboard() {
   const router = useRouter();
   const { user, logout } = useAuthStore();
+  const { height: windowHeight } = useWindowDimensions();
+  const notifListMaxHeight = Math.min(460, Math.max(220, windowHeight * 0.52));
 
   const [classes, setClasses] = useState<any[]>([]);
   const [homework, setHomework] = useState<any[]>([]);
@@ -26,19 +30,19 @@ export default function TeacherDashboard() {
   const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
   const [schoolName, setSchoolName] = useState<string | null>(null);
 
-  type SalaryNotification = {
+  type TeacherNotification = {
     id: string;
-    month: string;
-    year: number;
-    amount: number;
-    paymentDate: string;
+    title: string;
+    message: string;
+    createdAt: string;
+    type: string;
     read: boolean;
   };
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
   const [notifError, setNotifError] = useState<string | null>(null);
-  const [notifItems, setNotifItems] = useState<SalaryNotification[]>([]);
+  const [notifItems, setNotifItems] = useState<TeacherNotification[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -59,58 +63,27 @@ export default function TeacherDashboard() {
     })();
   }, []);
 
-  // Load salary notifications on mount (for badge + unread state)
+  // Load teacher notifications on mount (salary + bonus/adjustment)
   useEffect(() => {
     (async () => {
       try {
         setNotifLoading(true);
         setNotifError(null);
-        const res = await api.get("/salaries/my/history");
+        const res = await api.get("/user-notifications");
         const data = res.data?.data ?? res.data ?? [];
         const list = Array.isArray(data) ? data : [];
-
-        let seenIds: string[] = [];
-        if (typeof window !== "undefined") {
-          try {
-            const raw = window.localStorage.getItem(
-              "teacherSalarySeenNotificationIds"
-            );
-            if (raw) {
-              const parsed = JSON.parse(raw);
-              if (Array.isArray(parsed)) {
-                seenIds = parsed.filter((x) => typeof x === "string");
-              }
-            }
-          } catch {
-            // ignore storage errors
-          }
-        }
-
-        const flattened: SalaryNotification[] = list.flatMap(
-          (r: any) =>
-            (r.paymentHistory ?? []).map((h: any, idx: number) => {
-              const id = `${r._id}-${idx}-${h.paymentDate}`;
-              return {
-                id,
-                month: r.month,
-                year: r.year,
-                amount: h.amount,
-                paymentDate: h.paymentDate,
-                read: seenIds.includes(id),
-              } as SalaryNotification;
-            })
-        );
-
-        flattened.sort(
-          (a, b) =>
-            new Date(b.paymentDate).getTime() -
-            new Date(a.paymentDate).getTime()
-        );
-
-        setNotifItems(flattened.slice(0, 20));
+        const normalized: TeacherNotification[] = list.map((n: any) => ({
+          id: String(n._id),
+          title: String(n.title ?? "Notification"),
+          message: String(n.message ?? ""),
+          createdAt: String(n.createdAt ?? new Date().toISOString()),
+          type: String(n.type ?? "general"),
+          read: Boolean(n.isRead),
+        }));
+        setNotifItems(normalized.slice(0, 50));
       } catch (e: any) {
         setNotifError(
-          e?.response?.data?.message ?? "Unable to load salary notifications."
+          e?.response?.data?.message ?? "Unable to load notifications."
         );
       } finally {
         setNotifLoading(false);
@@ -223,7 +196,7 @@ export default function TeacherDashboard() {
           >
             <Text style={styles.modalTitle}>Notifications</Text>
             <Text style={styles.modalSubtitle}>
-              Latest updates about your salary.
+              Latest salary and account updates.
             </Text>
 
             {!!notifItems.filter((n) => !n.read).length && (
@@ -233,17 +206,7 @@ export default function TeacherDashboard() {
                   setNotifItems((items) =>
                     items.map((n) => ({ ...n, read: true }))
                   );
-                  if (typeof window !== "undefined") {
-                    try {
-                      const allIds = notifItems.map((n) => n.id);
-                      window.localStorage.setItem(
-                        "teacherSalarySeenNotificationIds",
-                        JSON.stringify(allIds)
-                      );
-                    } catch {
-                      // ignore storage errors
-                    }
-                  }
+                  api.patch("/user-notifications/read-all").catch(() => {});
                 }}
               >
                 <Text style={styles.markAllText}>Mark all as read</Text>
@@ -264,68 +227,64 @@ export default function TeacherDashboard() {
                 <Text style={styles.modalEmpty}>No salary updates yet.</Text>
               </View>
             ) : (
-              notifItems.map((n) => {
-                const dt = new Date(n.paymentDate);
-                const dateStr = dt.toLocaleDateString("en-IN", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                });
-                const timeStr = dt.toLocaleTimeString("en-IN", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                });
-                return (
-                  <TouchableOpacity
-                    key={n.id}
-                    style={[
-                      styles.notifItem,
-                      !n.read && styles.notifItemUnread,
-                    ]}
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      setNotifItems((items) => {
-                        const next = items.map((it) =>
-                          it.id === n.id ? { ...it, read: true } : it
-                        );
-                        if (typeof window !== "undefined") {
-                          try {
-                            const seen = next
-                              .filter((it) => it.read)
-                              .map((it) => it.id);
-                            window.localStorage.setItem(
-                              "teacherSalarySeenNotificationIds",
-                              JSON.stringify(seen)
-                            );
-                          } catch {
-                            // ignore
-                          }
-                        }
-                        return next;
-                      });
-                    }}
-                  >
-                    <Text
+              <ScrollView
+                style={[styles.notifScroll, { maxHeight: notifListMaxHeight }]}
+                contentContainerStyle={styles.notifScrollContent}
+                showsVerticalScrollIndicator
+                scrollIndicatorInsets={{ right: 2 }}
+                persistentScrollbar={Platform.OS === "android"}
+                indicatorStyle={Platform.OS === "ios" ? "black" : undefined}
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled
+              >
+                {notifItems.map((n) => {
+                  const dt = new Date(n.createdAt);
+                  const dateStr = dt.toLocaleDateString("en-IN", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  });
+                  const timeStr = dt.toLocaleTimeString("en-IN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  });
+                  return (
+                    <TouchableOpacity
+                      key={n.id}
                       style={[
-                        styles.notifText,
-                        !n.read && styles.notifTextUnread,
+                        styles.notifItem,
+                        !n.read && styles.notifItemUnread,
                       ]}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        setNotifItems((items) => {
+                          const next = items.map((it) =>
+                            it.id === n.id ? { ...it, read: true } : it
+                          );
+                          api.patch(`/user-notifications/${n.id}/read`).catch(() => {});
+                          return next;
+                        });
+                      }}
                     >
-                      ₹{Number(n.amount).toLocaleString("en-IN", {
-                        maximumFractionDigits: 0,
-                      })}{" "}
-                      of your salary for {n.month} {n.year} has been
-                      transferred.
-                    </Text>
-                    <Text style={styles.notifMeta}>
-                      {dateStr} · {timeStr}
-                    </Text>
-                    {!n.read && (
-                      <Text style={styles.unreadLabel}>Unread</Text>
-                    )}
-                  </TouchableOpacity>
-                );
-              })
+                      <Text
+                        style={[
+                          styles.notifText,
+                          !n.read && styles.notifTextUnread,
+                        ]}
+                      >
+                        {n.title}
+                      </Text>
+                      {!!n.message && <Text style={styles.notifBody}>{n.message}</Text>}
+                      <Text style={styles.notifMeta}>
+                        {dateStr} · {timeStr}
+                      </Text>
+                      {!n.read && (
+                        <Text style={styles.unreadLabel}>Unread</Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             )}
           </Pressable>
         </Pressable>
@@ -511,10 +470,18 @@ const styles = StyleSheet.create({
   modalCard: {
     width: "100%",
     maxWidth: 380,
+    maxHeight: "85%",
     borderRadius: 20,
     backgroundColor: "#ffffff",
     paddingVertical: 18,
     paddingHorizontal: 16,
+  },
+  notifScroll: {
+    marginHorizontal: -4,
+  },
+  notifScrollContent: {
+    paddingBottom: 8,
+    flexGrow: 0,
   },
   modalTitle: {
     fontSize: 16,
@@ -558,6 +525,7 @@ const styles = StyleSheet.create({
   },
   notifText: { fontSize: 13, color: "#0f172a" },
   notifTextUnread: { color: "#0f172a", fontWeight: "600" },
+  notifBody: { fontSize: 12, color: "#334155", marginTop: 2 },
   notifMeta: { fontSize: 11, color: "#6b7280", marginTop: 2 },
   unreadLabel: {
     marginTop: 2,

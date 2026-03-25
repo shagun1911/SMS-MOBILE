@@ -26,8 +26,8 @@ export default function StudentHomeworkScreen() {
   }, []);
 
   const now = new Date();
-  const pending = homework.filter((h: any) => new Date(h.dueDate) >= now);
-  const past = homework.filter((h: any) => new Date(h.dueDate) < now);
+  const pending = homework.filter((h: any) => !h.dueDate || new Date(h.dueDate) >= now);
+  const past = homework.filter((h: any) => !!h.dueDate && new Date(h.dueDate) < now);
 
   if (loading) {
     return (
@@ -38,8 +38,9 @@ export default function StudentHomeworkScreen() {
   }
 
   const Card = ({ hw }: { hw: any }) => {
-    const due = new Date(hw.dueDate);
-    const isOverdue = due < now;
+    const hasDueDate = !!hw.dueDate;
+    const due = hasDueDate ? new Date(hw.dueDate) : null;
+    const isOverdue = hasDueDate && !!due && due < now;
     return (
       <View style={[styles.card, isOverdue && styles.cardPast]}>
         <Text style={styles.badge}>{hw.subject}</Text>
@@ -47,7 +48,9 @@ export default function StudentHomeworkScreen() {
         <Text style={styles.cardDesc}>{hw.description}</Text>
         <Text style={styles.cardMeta}>By {hw.createdBy?.name || "Teacher"}</Text>
         <Text style={[styles.cardDue, isOverdue && styles.cardDuePast]}>
-          {isOverdue ? "Past" : "Due"}: {due.toLocaleDateString()}
+          {hasDueDate && due
+            ? `${isOverdue ? "Past" : "Due"}: ${due.toLocaleDateString()}`
+            : "No due date"}
         </Text>
         {hw.attachmentUrl ? (
           <Text
