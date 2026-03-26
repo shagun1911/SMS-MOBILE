@@ -3,7 +3,7 @@
 // Kotlin must match react-native/gradle/libs.versions.toml (RN 0.81 → Kotlin 2.1.20).
 // Forcing 1.9.x breaks expo-updates KSP (KspTaskJvm / ChangedFiles) against the real compiler.
 
-def kotlinVersion = findProperty('android.kotlinVersion') ?: '2.1.20'
+ext.kotlinVersion = findProperty('android.kotlinVersion') ?: '2.1.20'
 
 buildscript {
     ext {
@@ -21,12 +21,11 @@ buildscript {
     dependencies {
         classpath('com.android.tools.build:gradle')
         classpath('com.facebook.react:react-native-gradle-plugin')
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:${rootProject.ext.kotlinVersion}")
     }
 }
 
 // expo-updates resolves KSP from rootProject["kotlinVersion"]
-ext.kotlinVersion = kotlinVersion
 
 apply plugin: "com.facebook.react.rootproject"
 
