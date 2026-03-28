@@ -4,6 +4,7 @@
   },
   "build": {
     "apk": {
+      "channel": "production",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://sms-backend-om73.onrender.com"
       },
