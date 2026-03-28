@@ -1,20 +1,19 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 //
 // Kotlin must match react-native/gradle/libs.versions.toml (RN 0.81 → Kotlin 2.1.20).
-// Forcing 1.9.x breaks expo-updates KSP (KspTaskJvm / ChangedFiles) against the real compiler.
+// SDK / NDK defaults match RN 0.81 (see react-native/gradle/libs.versions.toml).
 //
-// kotlinVersion must live in buildscript.ext first: the dependencies {} block runs before
-// rootProject.ext is reliably visible to classpath resolution on EAS/Gradle 8.13.
+// Do not use file-level `def` vars inside buildscript {} — EAS/Gradle can evaluate buildscript
+// before outer defs exist. Use findProperty here and mirror onto rootProject.ext below.
 
 buildscript {
     ext {
         kotlinVersion = findProperty('android.kotlinVersion') ?: '2.1.20'
-        buildToolsVersion = findProperty('android.buildToolsVersion') ?: '35.0.0'
+        buildToolsVersion = findProperty('android.buildToolsVersion') ?: '36.0.0'
         minSdkVersion = Integer.parseInt(findProperty('android.minSdkVersion') ?: '24')
-        compileSdkVersion = Integer.parseInt(findProperty('android.compileSdkVersion') ?: '35')
-        targetSdkVersion = Integer.parseInt(findProperty('android.targetSdkVersion') ?: '34')
-
-        ndkVersion = "26.1.10909125"
+        compileSdkVersion = Integer.parseInt(findProperty('android.compileSdkVersion') ?: '36')
+        targetSdkVersion = Integer.parseInt(findProperty('android.targetSdkVersion') ?: '36')
+        ndkVersion = findProperty('android.ndkVersion') ?: '27.1.12297006'
     }
     repositories {
         google()
@@ -23,12 +22,17 @@ buildscript {
     dependencies {
         classpath('com.android.tools.build:gradle')
         classpath('com.facebook.react:react-native-gradle-plugin')
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:${kotlinVersion}")
     }
 }
 
-// expo-updates resolves KSP from rootProject["kotlinVersion"]
-ext.kotlinVersion = buildscript.ext.kotlinVersion
+// :app + autolinked modules (expo-updates reads rootProject["kotlinVersion"] for KSP).
+ext.kotlinVersion = findProperty('android.kotlinVersion') ?: '2.1.20'
+ext.buildToolsVersion = findProperty('android.buildToolsVersion') ?: '36.0.0'
+ext.minSdkVersion = Integer.parseInt(findProperty('android.minSdkVersion') ?: '24')
+ext.compileSdkVersion = Integer.parseInt(findProperty('android.compileSdkVersion') ?: '36')
+ext.targetSdkVersion = Integer.parseInt(findProperty('android.targetSdkVersion') ?: '36')
+ext.ndkVersion = findProperty('android.ndkVersion') ?: '27.1.12297006'
 
 apply plugin: "com.facebook.react.rootproject"
 
