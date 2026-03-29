@@ -7,9 +7,24 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+function isFormDataPayload(data: unknown): boolean {
+  if (typeof FormData === "undefined" || data == null) return false;
+  if (data instanceof FormData) return true;
+  return typeof (data as { append?: unknown }).append === "function";
+}
+
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token;
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (isFormDataPayload(config.data)) {
+    const h = config.headers as Record<string, unknown> & {
+      delete?: (key: string) => void;
+    };
+    delete h["Content-Type"];
+    delete h["content-type"];
+    h.delete?.("Content-Type");
+    h.delete?.("content-type");
+  }
   return config;
 });
 

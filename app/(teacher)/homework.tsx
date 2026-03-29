@@ -13,7 +13,22 @@ import {
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as DocumentPicker from "expo-document-picker";
 import api from "@/lib/api";
+
+const MAX_HOMEWORK_FILES = 8;
+
+const HOMEWORK_MIME_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+] as const;
+
+type PendingFile = { uri: string; name: string; mimeType?: string };
 
 export default function TeacherHomeworkScreen() {
   const [homework, setHomework] = useState<any[]>([]);
@@ -30,8 +45,8 @@ export default function TeacherHomeworkScreen() {
     subject: "",
     title: "",
     description: "",
-    attachmentUrl: "",
   });
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
 
   const load = async () => {
     try {
@@ -76,6 +91,65 @@ export default function TeacherHomeworkScreen() {
 
   const sections = sectionsByClass[form.className] ?? [];
 
+  const pickAttachments = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [...HOMEWORK_MIME_TYPES],
+        copyToCacheDirectory: true,
+        multiple: true,
+      });
+      if (result.canceled) return;
+      const assets = result.assets ?? [];
+      setPendingFiles((prev) => {
+        const room = MAX_HOMEWORK_FILES - prev.length;
+        if (room <= 0) {
+          Alert.alert("Limit", `You can attach up to ${MAX_HOMEWORK_FILES} files per homework.`);
+          return prev;
+        }
+        const toAdd = assets.slice(0, room);
+        if (assets.length > room) {
+          Alert.alert(
+            "Limit",
+            `Only ${room} more file(s) added (maximum ${MAX_HOMEWORK_FILES} per homework).`
+          );
+        }
+        return [
+          ...prev,
+          ...toAdd.map((a) => ({
+            uri: a.uri,
+            name: a.name || "file",
+            mimeType: a.mimeType || undefined,
+          })),
+        ];
+      });
+    } catch {
+      Alert.alert("Error", "Could not open the file picker.");
+    }
+  };
+
+  const removePendingFile = (index: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadHomeworkAsset = async (f: PendingFile) => {
+    const formData = new FormData();
+    formData.append(
+      "file",
+      {
+        uri: f.uri,
+        name: f.name,
+        type: f.mimeType || "application/octet-stream",
+      } as any
+    );
+    const res = await api.post("/upload/homework", formData);
+    const d = res.data?.data;
+    return {
+      url: d?.url as string,
+      filename: (d?.filename as string) || f.name,
+      mimeType: (d?.mimeType as string) || f.mimeType,
+    };
+  };
+
   const submit = async () => {
     if (!form.className || !form.section || !form.subject || !form.title || !form.description) {
       Alert.alert("Missing fields", "Please fill all required fields.");
@@ -83,23 +157,30 @@ export default function TeacherHomeworkScreen() {
     }
     setSubmitting(true);
     try {
+      const uploaded: { url: string; filename?: string; mimeType?: string }[] = [];
+      for (const f of pendingFiles) {
+        const meta = await uploadHomeworkAsset(f);
+        if (!meta.url) throw new Error("Upload missing URL");
+        uploaded.push(meta);
+      }
       const fallbackDueDate = new Date();
       const payload = {
         ...form,
         section: form.section.toUpperCase(),
-        // Backward compatibility for deployed backends that still require dueDate.
         dueDate: fallbackDueDate.toISOString().slice(0, 10),
+        ...(uploaded.length > 0 ? { attachments: uploaded } : {}),
       };
       await api.post("/homework", payload);
       setShowForm(false);
-      setForm({ className: "", section: "", subject: "", title: "", description: "", attachmentUrl: "" });
+      setForm({ className: "", section: "", subject: "", title: "", description: "" });
+      setPendingFiles([]);
       Alert.alert("Assigned", "Homework assigned to selected class and section students.");
       load();
     } catch (error: any) {
-      const message = error?.response?.data?.message ?? "Failed to assign homework.";
-      Alert.alert("Assign failed", message);
-    }
-    finally {
+      const message =
+        error?.response?.data?.message ?? error?.message ?? "Failed to assign homework.";
+      Alert.alert("Assign failed", String(message));
+    } finally {
       setSubmitting(false);
     }
   };
@@ -147,6 +228,13 @@ export default function TeacherHomeworkScreen() {
                 ) : (
                   <Text style={styles.cardDue}>No due date</Text>
                 )}
+                {Array.isArray(hw.attachments) && hw.attachments.length > 0 ? (
+                  <Text style={styles.cardFiles}>
+                    📎 {hw.attachments.length} file{hw.attachments.length === 1 ? "" : "s"}
+                  </Text>
+                ) : hw.attachmentUrl ? (
+                  <Text style={styles.cardFiles}>📎 1 file</Text>
+                ) : null}
               </View>
               <TouchableOpacity onPress={() => deleteHw(hw._id)}>
                 <Text style={styles.deleteText}>Delete</Text>
@@ -163,7 +251,12 @@ export default function TeacherHomeworkScreen() {
             <View style={styles.modalBox}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>New Homework</Text>
-                <TouchableOpacity onPress={() => setShowForm(false)}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowForm(false);
+                    setPendingFiles([]);
+                  }}
+                >
                   <Text style={styles.modalClose}>Cancel</Text>
                 </TouchableOpacity>
               </View>
@@ -217,6 +310,23 @@ export default function TeacherHomeworkScreen() {
                   placeholderTextColor="#94a3b8"
                   multiline
                 />
+                <Text style={styles.label}>Attachments (optional)</Text>
+                <Text style={styles.hint}>
+                  PNG, JPEG, WebP, PDF, Word (.doc / .docx) — up to {MAX_HOMEWORK_FILES} files
+                </Text>
+                <TouchableOpacity style={styles.pickFileBtn} onPress={pickAttachments}>
+                  <Text style={styles.pickFileBtnText}>+ Add files</Text>
+                </TouchableOpacity>
+                {pendingFiles.map((f, i) => (
+                  <View key={`${f.uri}-${i}`} style={styles.fileRow}>
+                    <Text style={styles.fileName} numberOfLines={1}>
+                      {f.name}
+                    </Text>
+                    <TouchableOpacity onPress={() => removePendingFile(i)}>
+                      <Text style={styles.fileRemove}>Remove</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
                 <TouchableOpacity
                   style={[styles.submitBtn, submitting && styles.submitDisabled]}
                   onPress={submit}
@@ -313,7 +423,33 @@ const styles = StyleSheet.create({
   cardTitle: { fontWeight: "600", color: "#0f172a" },
   cardDesc: { fontSize: 13, color: "#64748b", marginTop: 4 },
   cardDue: { fontSize: 12, color: "#94a3b8", marginTop: 6 },
+  cardFiles: { fontSize: 12, color: "#047857", marginTop: 4 },
   deleteText: { color: "#dc2626", fontSize: 13 },
+  hint: { fontSize: 12, color: "#64748b", marginBottom: 8 },
+  pickFileBtn: {
+    backgroundColor: "#ecfdf5",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#a7f3d0",
+    marginBottom: 8,
+    alignItems: "center",
+  },
+  pickFileBtnText: { color: "#047857", fontWeight: "600" },
+  fileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#f8fafc",
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  fileName: { flex: 1, fontSize: 13, color: "#0f172a", marginRight: 8 },
+  fileRemove: { color: "#dc2626", fontSize: 13, fontWeight: "600" },
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
   modalBox: { backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "90%", padding: 20 },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 },

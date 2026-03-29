@@ -41,6 +41,12 @@ export default function StudentHomeworkScreen() {
     const hasDueDate = !!hw.dueDate;
     const due = hasDueDate ? new Date(hw.dueDate) : null;
     const isOverdue = hasDueDate && !!due && due < now;
+    const attachmentItems: { url: string; filename?: string }[] =
+      Array.isArray(hw.attachments) && hw.attachments.length > 0
+        ? hw.attachments.filter((a: any) => a?.url)
+        : hw.attachmentUrl
+          ? [{ url: hw.attachmentUrl, filename: "Attachment" }]
+          : [];
     return (
       <View style={[styles.card, isOverdue && styles.cardPast]}>
         <Text style={styles.badge}>{hw.subject}</Text>
@@ -52,13 +58,19 @@ export default function StudentHomeworkScreen() {
             ? `${isOverdue ? "Past" : "Due"}: ${due.toLocaleDateString()}`
             : "No due date"}
         </Text>
-        {hw.attachmentUrl ? (
-          <Text
-            style={styles.attachment}
-            onPress={() => Linking.openURL(hw.attachmentUrl)}
-          >
-            View attachment →
-          </Text>
+        {attachmentItems.length > 0 ? (
+          <View style={styles.attachmentsBlock}>
+            <Text style={styles.attachmentsLabel}>Files from teacher</Text>
+            {attachmentItems.map((item, idx) => (
+              <Text
+                key={`${item.url}-${idx}`}
+                style={styles.attachment}
+                onPress={() => Linking.openURL(item.url)}
+              >
+                {item.filename || `File ${idx + 1}`} →
+              </Text>
+            ))}
+          </View>
         ) : null}
       </View>
     );
@@ -114,6 +126,8 @@ const styles = StyleSheet.create({
   cardMeta: { fontSize: 12, color: "#94a3b8", marginTop: 4 },
   cardDue: { fontSize: 13, fontWeight: "500", color: "#dc2626", marginTop: 8 },
   cardDuePast: { color: "#64748b" },
-  attachment: { fontSize: 13, color: "#4f46e5", marginTop: 8 },
+  attachmentsBlock: { marginTop: 8 },
+  attachmentsLabel: { fontSize: 12, fontWeight: "600", color: "#475569", marginBottom: 4 },
+  attachment: { fontSize: 13, color: "#4f46e5", marginTop: 4 },
   empty: { color: "#64748b", paddingVertical: 24 },
 });
