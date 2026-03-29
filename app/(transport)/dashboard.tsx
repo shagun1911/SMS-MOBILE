@@ -9,11 +9,15 @@ import {
   Modal,
   Pressable,
   TextInput,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
 import { useRouter } from "expo-router";
+import { matchStaffMemberId } from "@/lib/transportStaff";
+
+type CrewMember = { _id: string; name: string; phone?: string };
 
 export default function TransportDashboard() {
   const router = useRouter();
@@ -38,6 +42,12 @@ export default function TransportDashboard() {
   const [driverPhone, setDriverPhone] = useState("");
   const [conductorName, setConductorName] = useState("");
   const [conductorPhone, setConductorPhone] = useState("");
+  const [crewDrivers, setCrewDrivers] = useState<CrewMember[]>([]);
+  const [crewConductors, setCrewConductors] = useState<CrewMember[]>([]);
+  const [driverStaffId, setDriverStaffId] = useState("");
+  const [conductorStaffId, setConductorStaffId] = useState("");
+  const [showDriverPicker, setShowDriverPicker] = useState(false);
+  const [showConductorPicker, setShowConductorPicker] = useState(false);
 
   // Assign/unassign students
   const [allStudents, setAllStudents] = useState<any[]>([]);
@@ -47,13 +57,17 @@ export default function TransportDashboard() {
   const [assigning, setAssigning] = useState(false);
   const [unassigningId, setUnassigningId] = useState<string | null>(null);
 
+  const fetchFleet = async () => {
+    const res = await api.get("/transport");
+    const list = res.data?.data ?? res.data ?? [];
+    setFleet(Array.isArray(list) ? list : []);
+  };
+
   useEffect(() => {
     (async () => {
       try {
         setLoading(true);
-        const res = await api.get("/transport");
-        const list = res.data?.data ?? res.data ?? [];
-        setFleet(Array.isArray(list) ? list : []);
+        await fetchFleet();
       } catch (e: any) {
         setError(e?.response?.data?.message ?? "Unable to load buses.");
       } finally {
@@ -62,6 +76,13 @@ export default function TransportDashboard() {
     })();
   }, []);
 
+  const mapCrew = (list: any[]): CrewMember[] =>
+    (Array.isArray(list) ? list : []).map((u) => ({
+      _id: String(u._id),
+      name: u.name ?? "",
+      phone: u.phone,
+    }));
+
   const openDetails = async (id: string) => {
     setSelectedBusId(id);
     setDetailsOpen(true);
@@ -69,9 +90,18 @@ export default function TransportDashboard() {
     setDetailsError(null);
     setEditMode(false);
     try {
-      const res = await api.get(`/transport/${id}/details`);
-      setBusDetails(res.data?.data ?? res.data);
-      const b = res.data?.data?.bus ?? res.data?.bus;
+      const [detailRes, crewRes] = await Promise.all([
+        api.get(`/transport/${id}/details`),
+        api.get(`/transport/crew-options`),
+      ]);
+      const payload = detailRes.data?.data ?? detailRes.data;
+      const crew = crewRes.data?.data ?? crewRes.data;
+      const drivers = mapCrew(crew?.drivers ?? []);
+      const conductors = mapCrew(crew?.conductors ?? []);
+      setCrewDrivers(drivers);
+      setCrewConductors(conductors);
+      setBusDetails(payload);
+      const b = payload?.bus;
       if (b) {
         setBusNumber(b.busNumber ?? "");
         setRegistrationNumber(b.registrationNumber ?? "");
@@ -81,6 +111,16 @@ export default function TransportDashboard() {
         setDriverPhone(b.driverPhone ?? "");
         setConductorName(b.conductorName ?? "");
         setConductorPhone(b.conductorPhone ?? "");
+        setDriverStaffId(
+          b.driverUserId
+            ? String(b.driverUserId)
+            : matchStaffMemberId(drivers, b.driverName, b.driverPhone)
+        );
+        setConductorStaffId(
+          b.conductorUserId
+            ? String(b.conductorUserId)
+            : matchStaffMemberId(conductors, b.conductorName, b.conductorPhone)
+        );
       }
     } catch (e: any) {
       setDetailsError(e?.response?.data?.message ?? "Unable to load bus details.");
@@ -128,14 +168,36 @@ export default function TransportDashboard() {
     if (!selectedBusId) return;
     try {
       const res = await api.get(`/transport/${selectedBusId}/details`);
-      setBusDetails(res.data?.data ?? res.data);
+      const payload = res.data?.data ?? res.data;
+      setBusDetails(payload);
+      const b = payload?.bus;
+      if (b) {
+        setDriverStaffId(
+          b.driverUserId
+            ? String(b.driverUserId)
+            : matchStaffMemberId(crewDrivers, b.driverName, b.driverPhone)
+        );
+        setConductorStaffId(
+          b.conductorUserId
+            ? String(b.conductorUserId)
+            : matchStaffMemberId(crewConductors, b.conductorName, b.conductorPhone)
+        );
+        setBusNumber(b.busNumber ?? "");
+        setRegistrationNumber(b.registrationNumber ?? "");
+        setRouteName(b.routeName ?? "");
+        setCapacity(b.capacity != null ? String(b.capacity) : "");
+        setDriverName(b.driverName ?? "");
+        setDriverPhone(b.driverPhone ?? "");
+        setConductorName(b.conductorName ?? "");
+        setConductorPhone(b.conductorPhone ?? "");
+      }
     } catch {
       // ignore
     }
   };
 
   const handleSaveBus = async () => {
-    if (!selectedBusId) return;
+    if (!selectedBusId || !bus) return;
     try {
       setDetailsLoading(true);
       await api.put(`/transport/${selectedBusId}`, {
@@ -147,11 +209,22 @@ export default function TransportDashboard() {
         driverPhone: driverPhone?.trim() || "",
         conductorName: conductorName?.trim() || "",
         conductorPhone: conductorPhone?.trim() || "",
+        driverUserId: driverStaffId || "",
+        conductorUserId: conductorStaffId || "",
       });
       await refreshDetails();
+      try {
+        await fetchFleet();
+      } catch {
+        // grid may be stale until next open
+      }
       setEditMode(false);
-    } catch {
-      // could show toast via Alert, but keep simple for now
+    } catch (e: any) {
+      const msg =
+        e?.response?.data?.message ??
+        e?.message ??
+        "Could not save bus details.";
+      Alert.alert("Cannot save", String(msg));
     } finally {
       setDetailsLoading(false);
     }
@@ -263,6 +336,8 @@ export default function TransportDashboard() {
           setEditMode(false);
           setAssignSearch("");
           setSelectedStudentIds({});
+          setShowDriverPicker(false);
+          setShowConductorPicker(false);
         }}
       >
         <Pressable
@@ -272,6 +347,8 @@ export default function TransportDashboard() {
             setEditMode(false);
             setAssignSearch("");
             setSelectedStudentIds({});
+            setShowDriverPicker(false);
+            setShowConductorPicker(false);
           }}
         >
           <Pressable
@@ -301,6 +378,8 @@ export default function TransportDashboard() {
                           style={[styles.chipButton, styles.chipOutline]}
                           onPress={() => {
                             setEditMode(false);
+                            setShowDriverPicker(false);
+                            setShowConductorPicker(false);
                             setBusNumber(bus.busNumber ?? "");
                             setRegistrationNumber(bus.registrationNumber ?? "");
                             setRouteName(bus.routeName ?? "");
@@ -309,6 +388,24 @@ export default function TransportDashboard() {
                             setDriverPhone(bus.driverPhone ?? "");
                             setConductorName(bus.conductorName ?? "");
                             setConductorPhone(bus.conductorPhone ?? "");
+                            setDriverStaffId(
+                              bus.driverUserId
+                                ? String(bus.driverUserId)
+                                : matchStaffMemberId(
+                                    crewDrivers,
+                                    bus.driverName,
+                                    bus.driverPhone
+                                  )
+                            );
+                            setConductorStaffId(
+                              bus.conductorUserId
+                                ? String(bus.conductorUserId)
+                                : matchStaffMemberId(
+                                    crewConductors,
+                                    bus.conductorName,
+                                    bus.conductorPhone
+                                  )
+                            );
                           }}
                         >
                           <Text style={styles.chipOutlineText}>Cancel</Text>
@@ -334,6 +431,24 @@ export default function TransportDashboard() {
                           setDriverPhone(bus.driverPhone ?? "");
                           setConductorName(bus.conductorName ?? "");
                           setConductorPhone(bus.conductorPhone ?? "");
+                          setDriverStaffId(
+                            bus.driverUserId
+                              ? String(bus.driverUserId)
+                              : matchStaffMemberId(
+                                  crewDrivers,
+                                  bus.driverName,
+                                  bus.driverPhone
+                                )
+                          );
+                          setConductorStaffId(
+                            bus.conductorUserId
+                              ? String(bus.conductorUserId)
+                              : matchStaffMemberId(
+                                  crewConductors,
+                                  bus.conductorName,
+                                  bus.conductorPhone
+                                )
+                          );
                         }}
                       >
                         <Text style={styles.chipOutlineText}>Edit</Text>
@@ -387,19 +502,32 @@ export default function TransportDashboard() {
                     <Text style={styles.infoLabel}>Driver</Text>
                     {editMode ? (
                       <>
-                        <TextInput
-                          style={styles.input}
-                          value={driverName}
-                          onChangeText={setDriverName}
-                          placeholder="Driver name"
-                        />
-                        <TextInput
-                          style={styles.input}
-                          value={driverPhone}
-                          onChangeText={setDriverPhone}
-                          placeholder="Driver phone"
-                          keyboardType="phone-pad"
-                        />
+                        <TouchableOpacity
+                          style={styles.crewSelect}
+                          onPress={() => setShowDriverPicker(true)}
+                          activeOpacity={0.75}
+                        >
+                          <Text style={styles.crewSelectText}>
+                            {driverStaffId
+                              ? (() => {
+                                  const m = crewDrivers.find(
+                                    (c) => c._id === driverStaffId
+                                  );
+                                  return m
+                                    ? `${m.name}${m.phone ? ` · ${m.phone}` : ""}`
+                                    : "Select driver";
+                                })()
+                              : driverName
+                                ? `${driverName} · pick from staff to confirm`
+                                : "Select driver"}
+                          </Text>
+                        </TouchableOpacity>
+                        {!crewDrivers.length ? (
+                          <Text style={styles.crewHint}>
+                            No bus drivers in staff. School admin adds them under
+                            Staff.
+                          </Text>
+                        ) : null}
                       </>
                     ) : (
                       <>
@@ -412,19 +540,31 @@ export default function TransportDashboard() {
                     <Text style={styles.infoLabel}>Conductor</Text>
                     {editMode ? (
                       <>
-                        <TextInput
-                          style={styles.input}
-                          value={conductorName}
-                          onChangeText={setConductorName}
-                          placeholder="Conductor name"
-                        />
-                        <TextInput
-                          style={styles.input}
-                          value={conductorPhone}
-                          onChangeText={setConductorPhone}
-                          placeholder="Conductor phone"
-                          keyboardType="phone-pad"
-                        />
+                        <TouchableOpacity
+                          style={styles.crewSelect}
+                          onPress={() => setShowConductorPicker(true)}
+                          activeOpacity={0.75}
+                        >
+                          <Text style={styles.crewSelectText}>
+                            {conductorStaffId
+                              ? (() => {
+                                  const m = crewConductors.find(
+                                    (c) => c._id === conductorStaffId
+                                  );
+                                  return m
+                                    ? `${m.name}${m.phone ? ` · ${m.phone}` : ""}`
+                                    : "Select conductor";
+                                })()
+                              : conductorName
+                                ? `${conductorName} · pick from staff to confirm`
+                                : "Select conductor"}
+                          </Text>
+                        </TouchableOpacity>
+                        {!crewConductors.length ? (
+                          <Text style={styles.crewHint}>
+                            No conductors in staff. School admin adds them under Staff.
+                          </Text>
+                        ) : null}
                       </>
                     ) : (
                       <>
@@ -550,6 +690,104 @@ export default function TransportDashboard() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal
+        visible={showDriverPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDriverPicker(false)}
+      >
+        <Pressable
+          style={styles.pickerBackdrop}
+          onPress={() => setShowDriverPicker(false)}
+        >
+          <Pressable
+            style={styles.pickerSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={styles.pickerTitle}>Choose driver</Text>
+            <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
+              <TouchableOpacity
+                style={styles.pickerRow}
+                onPress={() => {
+                  setDriverStaffId("");
+                  setDriverName("");
+                  setDriverPhone("");
+                  setShowDriverPicker(false);
+                }}
+              >
+                <Text style={styles.pickerRowMuted}>None (clear)</Text>
+              </TouchableOpacity>
+              {crewDrivers.map((m) => (
+                <TouchableOpacity
+                  key={m._id}
+                  style={styles.pickerRow}
+                  onPress={() => {
+                    setDriverStaffId(m._id);
+                    setDriverName(m.name);
+                    setDriverPhone(m.phone ?? "");
+                    setShowDriverPicker(false);
+                  }}
+                >
+                  <Text style={styles.pickerRowText}>
+                    {m.name}
+                    {m.phone ? ` · ${m.phone}` : ""}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={showConductorPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowConductorPicker(false)}
+      >
+        <Pressable
+          style={styles.pickerBackdrop}
+          onPress={() => setShowConductorPicker(false)}
+        >
+          <Pressable
+            style={styles.pickerSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={styles.pickerTitle}>Choose conductor</Text>
+            <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
+              <TouchableOpacity
+                style={styles.pickerRow}
+                onPress={() => {
+                  setConductorStaffId("");
+                  setConductorName("");
+                  setConductorPhone("");
+                  setShowConductorPicker(false);
+                }}
+              >
+                <Text style={styles.pickerRowMuted}>None (clear)</Text>
+              </TouchableOpacity>
+              {crewConductors.map((m) => (
+                <TouchableOpacity
+                  key={m._id}
+                  style={styles.pickerRow}
+                  onPress={() => {
+                    setConductorStaffId(m._id);
+                    setConductorName(m.name);
+                    setConductorPhone(m.phone ?? "");
+                    setShowConductorPicker(false);
+                  }}
+                >
+                  <Text style={styles.pickerRowText}>
+                    {m.name}
+                    {m.phone ? ` · ${m.phone}` : ""}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -659,6 +897,44 @@ const styles = StyleSheet.create({
   infoLabel: { fontSize: 12, color: "#6b7280" },
   infoValue: { fontSize: 15, fontWeight: "600", color: "#111827", marginTop: 2 },
   infoSub: { fontSize: 12, color: "#4b5563", marginTop: 2 },
+  crewSelect: {
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    marginTop: 6,
+    backgroundColor: "#f9fafb",
+  },
+  crewSelectText: { fontSize: 13, color: "#111827" },
+  crewHint: { fontSize: 11, color: "#6b7280", marginTop: 6, lineHeight: 15 },
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15,23,42,0.45)",
+    justifyContent: "flex-end",
+  },
+  pickerSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 28,
+    maxHeight: "55%",
+  },
+  pickerTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginBottom: 12,
+  },
+  pickerRow: {
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  pickerRowText: { fontSize: 16, color: "#0f172a" },
+  pickerRowMuted: { fontSize: 16, color: "#64748b" },
   studentRow: {
     paddingVertical: 8,
     borderBottomWidth: 1,

@@ -11,10 +11,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Image,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
-import api from "@/lib/api";
+import api, { postMultipart } from "@/lib/api";
 
 const MAX_HOMEWORK_FILES = 8;
 
@@ -29,6 +31,24 @@ const HOMEWORK_MIME_TYPES = [
 ] as const;
 
 type PendingFile = { uri: string; name: string; mimeType?: string };
+
+type AttachmentItem = { url: string; filename?: string; mimeType?: string };
+
+function homeworkAttachmentList(hw: any): AttachmentItem[] {
+  if (Array.isArray(hw.attachments) && hw.attachments.length > 0) {
+    return hw.attachments.filter((a: any) => a?.url);
+  }
+  if (hw.attachmentUrl) {
+    return [{ url: hw.attachmentUrl, filename: "Attachment" }];
+  }
+  return [];
+}
+
+function isImageAttachment(item: AttachmentItem): boolean {
+  if (item.mimeType?.startsWith("image/")) return true;
+  const u = item.url.toLowerCase();
+  return /(\.png|\.jpe?g|\.webp)(\?|$)/.test(u) || u.includes("/image/upload/");
+}
 
 export default function TeacherHomeworkScreen() {
   const [homework, setHomework] = useState<any[]>([]);
@@ -133,20 +153,39 @@ export default function TeacherHomeworkScreen() {
 
   const uploadHomeworkAsset = async (f: PendingFile) => {
     const formData = new FormData();
-    formData.append(
-      "file",
-      {
-        uri: f.uri,
-        name: f.name,
-        type: f.mimeType || "application/octet-stream",
-      } as any
-    );
-    const res = await api.post("/upload/homework", formData);
-    const d = res.data?.data;
+    const mime = f.mimeType || "application/octet-stream";
+    const safeName =
+      f.name && f.name.includes(".")
+        ? f.name
+        : `${f.name || "upload"}${
+            mime === "image/jpeg" || mime === "image/jpg"
+              ? ".jpg"
+              : mime === "image/png"
+                ? ".png"
+                : mime === "image/webp"
+                  ? ".webp"
+                  : mime === "application/pdf"
+                    ? ".pdf"
+                    : mime === "application/msword"
+                      ? ".doc"
+                      : mime ===
+                          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        ? ".docx"
+                        : ""
+          }`;
+    formData.append("file", {
+      uri: f.uri,
+      name: safeName,
+      type: mime,
+    } as any);
+    const json = (await postMultipart("/upload/homework", formData)) as {
+      data?: { url?: string; filename?: string; mimeType?: string };
+    };
+    const d = json?.data;
     return {
       url: d?.url as string,
-      filename: (d?.filename as string) || f.name,
-      mimeType: (d?.mimeType as string) || f.mimeType,
+      filename: (d?.filename as string) || safeName,
+      mimeType: (d?.mimeType as string) || mime,
     };
   };
 
@@ -215,32 +254,56 @@ export default function TeacherHomeworkScreen() {
         {homework.length === 0 ? (
           <Text style={styles.empty}>No homework assigned yet.</Text>
         ) : (
-          homework.map((hw: any) => (
-            <View key={hw._id} style={styles.card}>
-              <View style={styles.cardBody}>
-                <Text style={styles.badge}>
-                  Class {hw.className}-{hw.section} · {hw.subject}
-                </Text>
-                <Text style={styles.cardTitle}>{hw.title}</Text>
-                <Text style={styles.cardDesc} numberOfLines={2}>{hw.description}</Text>
-                {hw.dueDate ? (
-                  <Text style={styles.cardDue}>Due: {new Date(hw.dueDate).toLocaleDateString()}</Text>
-                ) : (
-                  <Text style={styles.cardDue}>No due date</Text>
-                )}
-                {Array.isArray(hw.attachments) && hw.attachments.length > 0 ? (
-                  <Text style={styles.cardFiles}>
-                    📎 {hw.attachments.length} file{hw.attachments.length === 1 ? "" : "s"}
+          homework.map((hw: any) => {
+            const attachmentItems = homeworkAttachmentList(hw);
+            return (
+              <View key={hw._id} style={styles.card}>
+                <View style={styles.cardBody}>
+                  <Text style={styles.badge}>
+                    Class {hw.className}-{hw.section} · {hw.subject}
                   </Text>
-                ) : hw.attachmentUrl ? (
-                  <Text style={styles.cardFiles}>📎 1 file</Text>
-                ) : null}
+                  <Text style={styles.cardTitle}>{hw.title}</Text>
+                  <Text style={styles.cardDesc} numberOfLines={2}>{hw.description}</Text>
+                  {hw.dueDate ? (
+                    <Text style={styles.cardDue}>Due: {new Date(hw.dueDate).toLocaleDateString()}</Text>
+                  ) : (
+                    <Text style={styles.cardDue}>No due date</Text>
+                  )}
+                  {attachmentItems.length > 0 ? (
+                    <View style={styles.attachmentsBlock}>
+                      <Text style={styles.attachmentsLabel}>Attachments you shared</Text>
+                      {attachmentItems.map((item, idx) => (
+                        <View key={`${item.url}-${idx}`} style={styles.attachmentRow}>
+                          {isImageAttachment(item) ? (
+                            <TouchableOpacity
+                              activeOpacity={0.85}
+                              onPress={() => Linking.openURL(item.url)}
+                              style={styles.previewThumbWrap}
+                            >
+                              <Image
+                                source={{ uri: item.url }}
+                                style={styles.previewThumb}
+                                resizeMode="cover"
+                              />
+                            </TouchableOpacity>
+                          ) : null}
+                          <Text
+                            style={styles.attachmentLink}
+                            onPress={() => Linking.openURL(item.url)}
+                          >
+                            {item.filename || `File ${idx + 1}`} →
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+                <TouchableOpacity onPress={() => deleteHw(hw._id)}>
+                  <Text style={styles.deleteText}>Delete</Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={() => deleteHw(hw._id)}>
-                <Text style={styles.deleteText}>Delete</Text>
-              </TouchableOpacity>
-            </View>
-          ))
+            );
+          })
         )}
 
         <Modal visible={showForm} animationType="slide" transparent>
@@ -423,7 +486,19 @@ const styles = StyleSheet.create({
   cardTitle: { fontWeight: "600", color: "#0f172a" },
   cardDesc: { fontSize: 13, color: "#64748b", marginTop: 4 },
   cardDue: { fontSize: 12, color: "#94a3b8", marginTop: 6 },
-  cardFiles: { fontSize: 12, color: "#047857", marginTop: 4 },
+  attachmentsBlock: { marginTop: 10 },
+  attachmentsLabel: { fontSize: 12, fontWeight: "600", color: "#475569", marginBottom: 6 },
+  attachmentRow: { marginBottom: 10 },
+  previewThumbWrap: {
+    borderRadius: 8,
+    overflow: "hidden",
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f1f5f9",
+  },
+  previewThumb: { width: "100%", height: 120 },
+  attachmentLink: { fontSize: 13, color: "#047857", fontWeight: "500" },
   deleteText: { color: "#dc2626", fontSize: 13 },
   hint: { fontSize: 12, color: "#64748b", marginBottom: 8 },
   pickFileBtn: {
