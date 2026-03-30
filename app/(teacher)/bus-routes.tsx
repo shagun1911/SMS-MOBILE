@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,8 @@ const MODAL_MAX_HEIGHT = Math.round(SCREEN_HEIGHT * 0.8);
 const MODAL_SCROLL_MAX_HEIGHT = MODAL_MAX_HEIGHT - 32;
 import { SafeAreaView } from "react-native-safe-area-context";
 import api from "@/lib/api";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 type Bus = {
   _id: string;
@@ -39,19 +41,47 @@ export default function TeacherBusRoutes() {
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [busDetails, setBusDetails] = useState<any | null>(null);
 
+  const loadBuses = useCallback(async () => {
+    const res = await api.get("/transport");
+    const data = res.data?.data ?? res.data ?? [];
+    setBuses(Array.isArray(data) ? data : []);
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
-        const res = await api.get("/transport");
-        const data = res.data?.data ?? res.data ?? [];
-        setBuses(Array.isArray(data) ? data : []);
+        setLoading(true);
+        setError(null);
+        await loadBuses();
       } catch (e: any) {
         setError(e?.response?.data?.message ?? "Failed to load bus routes");
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [loadBuses]);
+
+  const pullReload = useCallback(async () => {
+    try {
+      setError(null);
+      await loadBuses();
+      if (selectedBusId && detailsOpen) {
+        setDetailsLoading(true);
+        setDetailsError(null);
+        try {
+          const res = await api.get(`/transport/${selectedBusId}/details`);
+          setBusDetails(res.data?.data ?? res.data);
+        } catch (e: any) {
+          setDetailsError(e?.response?.data?.message ?? "Unable to load bus details.");
+        } finally {
+          setDetailsLoading(false);
+        }
+      }
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? "Failed to load bus routes");
+    }
+  }, [loadBuses, selectedBusId, detailsOpen]);
+  useRegisterScreenRefresh(pullReload);
 
   const openDetails = async (id: string) => {
     setSelectedBusId(id);
@@ -108,7 +138,7 @@ export default function TeacherBusRoutes() {
   return (
     <>
       <SafeAreaView style={styles.safeArea} edges={["top"]}>
-        <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
           <Text style={styles.title}>Bus Routes</Text>
           {buses.map((bus) => (
             <TouchableOpacity
@@ -146,7 +176,7 @@ export default function TeacherBusRoutes() {
               ) : null}
             </TouchableOpacity>
           ))}
-        </ScrollView>
+        </RefreshableScrollView>
       </SafeAreaView>
 
       <Modal

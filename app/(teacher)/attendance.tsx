@@ -4,13 +4,13 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
-  RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import api from "@/lib/api";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 function sectionLabel(cls: any): string {
   return cls.section ?? cls.sections?.[0] ?? "A";
@@ -20,7 +20,6 @@ export default function TeacherAttendanceClassesScreen() {
   const router = useRouter();
   const [classes, setClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     const res = await api.get("/classes");
@@ -39,16 +38,14 @@ export default function TeacherAttendanceClassesScreen() {
     })();
   }, [load]);
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
+  const pullReload = useCallback(async () => {
     try {
       await load();
     } catch {
       setClasses([]);
-    } finally {
-      setRefreshing(false);
     }
   }, [load]);
+  useRegisterScreenRefresh(pullReload);
 
   if (loading) {
     return (
@@ -73,11 +70,7 @@ export default function TeacherAttendanceClassesScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
+      <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
         <TouchableOpacity style={styles.backRow} onPress={() => router.back()} activeOpacity={0.7}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
@@ -108,7 +101,7 @@ export default function TeacherAttendanceClassesScreen() {
             </TouchableOpacity>
           );
         })}
-      </ScrollView>
+      </RefreshableScrollView>
     </SafeAreaView>
   );
 }

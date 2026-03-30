@@ -15,6 +15,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import api from "@/lib/api";
 import { API_BASE_URL } from "@/constants/env";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 const ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
 
@@ -211,9 +213,8 @@ export default function TeacherStudentProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const fetchStudentData = useCallback(async () => {
     if (!studentId) return;
-    setLoading(true);
     setError(null);
     try {
       const sRes = await api.get(`/students/${studentId}`);
@@ -281,14 +282,27 @@ export default function TeacherStudentProfileScreen() {
     } catch (e: any) {
       setError(e?.response?.data?.message ?? "Could not load student.");
       setStudent(null);
+    }
+  }, [studentId]);
+
+  const load = useCallback(async () => {
+    if (!studentId) return;
+    setLoading(true);
+    try {
+      await fetchStudentData();
     } finally {
       setLoading(false);
     }
-  }, [studentId]);
+  }, [studentId, fetchStudentData]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const pullReload = useCallback(async () => {
+    await fetchStudentData();
+  }, [fetchStudentData]);
+  useRegisterScreenRefresh(pullReload);
 
   const fmt = (n: number) =>
     `₹${Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
@@ -359,7 +373,7 @@ export default function TeacherStudentProfileScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <ScrollView
+      <RefreshableScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
@@ -605,7 +619,7 @@ export default function TeacherStudentProfileScreen() {
             ))}
           </View>
         )}
-      </ScrollView>
+      </RefreshableScrollView>
     </SafeAreaView>
   );
 }

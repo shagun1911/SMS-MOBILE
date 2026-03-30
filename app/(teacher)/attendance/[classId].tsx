@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
   Alert,
 } from "react-native";
@@ -12,6 +11,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import api from "@/lib/api";
 import { localCalendarYmd } from "@/lib/localYmd";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 type DayStatus = {
   submitted: boolean;
@@ -61,24 +62,31 @@ export default function TeacherAttendanceClassScreen() {
     }
   }, [classId, dateYmd]);
 
-  useEffect(() => {
+  const loadStudents = useCallback(async () => {
     if (!classId) return;
-    (async () => {
-      setLoadingStudents(true);
-      try {
-        const res = await api.get(`/classes/${classId}/students`);
-        setStudents(res.data.data ?? []);
-      } catch {
-        setStudents([]);
-      } finally {
-        setLoadingStudents(false);
-      }
-    })();
+    setLoadingStudents(true);
+    try {
+      const res = await api.get(`/classes/${classId}/students`);
+      setStudents(res.data.data ?? []);
+    } catch {
+      setStudents([]);
+    } finally {
+      setLoadingStudents(false);
+    }
   }, [classId]);
+
+  useEffect(() => {
+    loadStudents();
+  }, [loadStudents]);
 
   useEffect(() => {
     loadDay();
   }, [loadDay]);
+
+  const pullReload = useCallback(async () => {
+    await Promise.all([loadStudents(), loadDay()]);
+  }, [loadStudents, loadDay]);
+  useRegisterScreenRefresh(pullReload);
 
   const alreadySubmitted = dayStatus?.submitted === true;
   const busy = loadingStudents || loadingDay;
@@ -132,7 +140,7 @@ export default function TeacherAttendanceClassScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
         <TouchableOpacity style={styles.backRow} onPress={() => router.back()} activeOpacity={0.7}>
           <Text style={styles.backText}>← Classes</Text>
         </TouchableOpacity>
@@ -231,7 +239,7 @@ export default function TeacherAttendanceClassScreen() {
             )}
           </>
         )}
-      </ScrollView>
+      </RefreshableScrollView>
     </SafeAreaView>
   );
 }

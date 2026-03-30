@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import api from "@/lib/api";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 export default function TeacherMarksScreen() {
   const [exams, setExams] = useState<any[]>([]);
@@ -41,26 +43,38 @@ export default function TeacherMarksScreen() {
   const [showClassPicker, setShowClassPicker] = useState(false);
   const [showSectionPicker, setShowSectionPicker] = useState(false);
 
-  useEffect(() => {
-    loadBaseData();
+  const loadBaseData = useCallback(async () => {
+    const [eRes, cRes, sRes] = await Promise.all([
+      api.get("/exams"),
+      api.get("/classes"),
+      api.get("/sessions"),
+    ]);
+    setExams(eRes.data.data ?? []);
+    setClasses(cRes.data.data ?? []);
+    setSessions(sRes.data.data ?? []);
   }, []);
 
-  const loadBaseData = async () => {
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        await loadBaseData();
+      } catch {
+        Alert.alert("Error", "Failed to load exams data.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [loadBaseData]);
+
+  const pullReload = useCallback(async () => {
     try {
-      const [eRes, cRes, sRes] = await Promise.all([
-        api.get("/exams"),
-        api.get("/classes"),
-        api.get("/sessions"),
-      ]);
-      setExams(eRes.data.data ?? []);
-      setClasses(cRes.data.data ?? []);
-      setSessions(sRes.data.data ?? []);
-    } catch (_) {
+      await loadBaseData();
+    } catch {
       Alert.alert("Error", "Failed to load exams data.");
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [loadBaseData]);
+  useRegisterScreenRefresh(pullReload);
 
   const activeSession = useMemo(
     () => (sessions ?? []).find((s: any) => s.isActive),
@@ -353,7 +367,7 @@ export default function TeacherMarksScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.header}>
           <View style={styles.headerTextWrap}>
             <Text style={styles.title}>Exams & Marks</Text>
@@ -382,7 +396,7 @@ export default function TeacherMarksScreen() {
             )}
           </>
         )}
-      </ScrollView>
+      </RefreshableScrollView>
 
       <Modal visible={createOpen} animationType="slide" transparent>
         <View style={styles.modalOverlay}>

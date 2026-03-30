@@ -1,28 +1,41 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
 } from "react-native";
 import studentApi from "@/lib/studentApi";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 export default function StudentMarksScreen() {
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const loadResults = useCallback(async () => {
+    const res = await studentApi.get("/exams/student/results");
+    setResults(res.data.data ?? []);
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
-        const res = await studentApi.get("/exams/student/results");
-        setResults(res.data.data ?? []);
-      } catch (_) {}
-      finally {
+        setLoading(true);
+        await loadResults();
+      } catch (_) {
+      } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [loadResults]);
+
+  const pullReload = useCallback(async () => {
+    try {
+      await loadResults();
+    } catch (_) {}
+  }, [loadResults]);
+  useRegisterScreenRefresh(pullReload);
 
   const gradeColor = (grade: string) => {
     if (!grade) return "#64748b";
@@ -42,7 +55,7 @@ export default function StudentMarksScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>My Results</Text>
       <Text style={styles.subtitle}>Exam results and subject-wise performance</Text>
 
@@ -91,7 +104,7 @@ export default function StudentMarksScreen() {
           </View>
         ))
       )}
-    </ScrollView>
+    </RefreshableScrollView>
   );
 }
 

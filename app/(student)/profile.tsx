@@ -1,16 +1,17 @@
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
 } from "react-native";
 import studentApi from "@/lib/studentApi";
 import { useStudentAuthStore } from "@/store/studentAuthStore";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 export default function StudentProfileScreen() {
   const router = useRouter();
@@ -31,17 +32,29 @@ export default function StudentProfileScreen() {
     if (forceChange) setShowChangePw(true);
   }, [forceChange]);
 
+  const loadProfile = useCallback(async () => {
+    const res = await studentApi.get("/auth/student/me");
+    setProfile(res.data.data);
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
-        const res = await studentApi.get("/auth/student/me");
-        setProfile(res.data.data);
-      } catch (_) {}
-      finally {
+        setLoading(true);
+        await loadProfile();
+      } catch (_) {
+      } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [loadProfile]);
+
+  const pullReload = useCallback(async () => {
+    try {
+      await loadProfile();
+    } catch (_) {}
+  }, [loadProfile]);
+  useRegisterScreenRefresh(pullReload);
 
   const handleUpdateCredentials = async () => {
     if (newPw !== confirmPw) {
@@ -84,7 +97,7 @@ export default function StudentProfileScreen() {
   const data = profile || student;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <Text style={styles.name}>
           {data?.firstName} {data?.lastName}
@@ -187,7 +200,7 @@ export default function StudentProfileScreen() {
       </View>
 
       
-    </ScrollView>
+    </RefreshableScrollView>
   );
 }
 

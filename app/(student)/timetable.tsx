@@ -1,13 +1,14 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
 } from "react-native";
 import { useStudentAuthStore } from "@/store/studentAuthStore";
 import studentApi from "@/lib/studentApi";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -25,6 +26,19 @@ export default function StudentTimetableScreen() {
   const [timetable, setTimetable] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const loadTimetable = useCallback(async () => {
+    if (!student?.class || !student?.section) {
+      setTimetable([]);
+      return;
+    }
+    const params = new URLSearchParams({
+      className: String(student.class),
+      section: String(student.section),
+    });
+    const res = await studentApi.get(`/timetable?${params.toString()}`);
+    setTimetable(res.data.data ?? []);
+  }, [student?.class, student?.section]);
+
   useEffect(() => {
     if (!student?.class || !student?.section) {
       setLoading(false);
@@ -32,18 +46,21 @@ export default function StudentTimetableScreen() {
     }
     (async () => {
       try {
-        const params = new URLSearchParams({
-          className: String(student.class),
-          section: String(student.section),
-        });
-        const res = await studentApi.get(`/timetable?${params.toString()}`);
-        setTimetable(res.data.data ?? []);
-      } catch (_) {}
-      finally {
+        setLoading(true);
+        await loadTimetable();
+      } catch (_) {
+      } finally {
         setLoading(false);
       }
     })();
-  }, [student?.class, student?.section]);
+  }, [loadTimetable, student?.class, student?.section]);
+
+  const pullReload = useCallback(async () => {
+    try {
+      await loadTimetable();
+    } catch (_) {}
+  }, [loadTimetable]);
+  useRegisterScreenRefresh(pullReload);
 
   const getDay = (dayName: string) => {
     const n = DAY_NAME_TO_NUM[dayName];
@@ -59,7 +76,7 @@ export default function StudentTimetableScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Timetable</Text>
       <Text style={styles.subtitle}>
         Class {student?.class} — Section {student?.section}
@@ -99,7 +116,7 @@ export default function StudentTimetableScreen() {
           );
         })
       )}
-    </ScrollView>
+    </RefreshableScrollView>
   );
 }
 

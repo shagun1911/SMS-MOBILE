@@ -1,17 +1,18 @@
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import api from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 export default function TeacherProfileScreen() {
   const router = useRouter();
@@ -31,17 +32,29 @@ export default function TeacherProfileScreen() {
     if (forceChange) setShowChangePw(true);
   }, [forceChange]);
 
+  const loadProfile = useCallback(async () => {
+    const res = await api.get("/auth/me");
+    setProfile(res.data.data);
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
-        const res = await api.get("/auth/me");
-        setProfile(res.data.data);
-      } catch (_) {}
-      finally {
+        setLoading(true);
+        await loadProfile();
+      } catch (_) {
+      } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [loadProfile]);
+
+  const pullReload = useCallback(async () => {
+    try {
+      await loadProfile();
+    } catch (_) {}
+  }, [loadProfile]);
+  useRegisterScreenRefresh(pullReload);
 
   const handleChangePassword = async () => {
     if (newPw !== confirmPw) {
@@ -86,7 +99,7 @@ export default function TeacherProfileScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
         <Text style={styles.title}>My Profile</Text>
 
         {forceChange && (
@@ -175,7 +188,7 @@ export default function TeacherProfileScreen() {
             <Text style={styles.muted}>Your password is set. Click "Change" to update it.</Text>
           )}
         </View>
-      </ScrollView>
+      </RefreshableScrollView>
     </SafeAreaView>
   );
 }

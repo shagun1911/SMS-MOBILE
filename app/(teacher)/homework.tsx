@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
 import api, { postMultipart } from "@/lib/api";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 const MAX_HOMEWORK_FILES = 8;
 
@@ -68,46 +70,57 @@ export default function TeacherHomeworkScreen() {
   });
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
 
-  const load = async () => {
-    try {
-      const [hRes, cRes] = await Promise.all([
-        api.get("/homework"),
-        api.get("/classes"),
-      ]);
-      setHomework(hRes.data.data ?? []);
-      const classesRaw = cRes.data.data ?? [];
-      const sectionMap: Record<string, Set<string>> = {};
-      for (const cls of classesRaw) {
-        const className = String(cls.className ?? "").trim();
-        const section = String(cls.section ?? "").trim().toUpperCase();
-        if (!className || !section) continue;
-        if (!sectionMap[className]) sectionMap[className] = new Set<string>();
-        sectionMap[className].add(section);
-      }
+  const load = useCallback(async () => {
+    const [hRes, cRes] = await Promise.all([
+      api.get("/homework"),
+      api.get("/classes"),
+    ]);
+    setHomework(hRes.data.data ?? []);
+    const classesRaw = cRes.data.data ?? [];
+    const sectionMap: Record<string, Set<string>> = {};
+    for (const cls of classesRaw) {
+      const className = String(cls.className ?? "").trim();
+      const section = String(cls.section ?? "").trim().toUpperCase();
+      if (!className || !section) continue;
+      if (!sectionMap[className]) sectionMap[className] = new Set<string>();
+      sectionMap[className].add(section);
+    }
 
-      const classNames = Object.keys(sectionMap).sort((a, b) =>
-        a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+    const classNames = Object.keys(sectionMap).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+    );
+    const normalizedMap: Record<string, string[]> = {};
+    for (const className of classNames) {
+      normalizedMap[className] = Array.from(sectionMap[className]).sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: "base" })
       );
-      const normalizedMap: Record<string, string[]> = {};
-      for (const className of classNames) {
-        normalizedMap[className] = Array.from(sectionMap[className]).sort((a, b) =>
-          a.localeCompare(b, undefined, { sensitivity: "base" })
-        );
-      }
+    }
 
-      setClassOptions(classNames);
-      setSectionsByClass(normalizedMap);
-    } catch (_) {
-      Alert.alert("Error", "Failed to load homework data.");
-    }
-    finally {
-      setLoading(false);
-    }
-  };
+    setClassOptions(classNames);
+    setSectionsByClass(normalizedMap);
+  }, []);
 
   useEffect(() => {
-    load();
-  }, []);
+    (async () => {
+      try {
+        setLoading(true);
+        await load();
+      } catch {
+        Alert.alert("Error", "Failed to load homework data.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [load]);
+
+  const pullReload = useCallback(async () => {
+    try {
+      await load();
+    } catch {
+      Alert.alert("Error", "Failed to load homework data.");
+    }
+  }, [load]);
+  useRegisterScreenRefresh(pullReload);
 
   const sections = sectionsByClass[form.className] ?? [];
 
@@ -243,7 +256,7 @@ export default function TeacherHomeworkScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.header}>
           <Text style={styles.title}>Homework</Text>
           <TouchableOpacity style={styles.addBtn} onPress={() => setShowForm(true)}>
@@ -455,7 +468,7 @@ export default function TeacherHomeworkScreen() {
             </View>
           </View>
         </Modal>
-      </ScrollView>
+      </RefreshableScrollView>
     </SafeAreaView>
   );
 }

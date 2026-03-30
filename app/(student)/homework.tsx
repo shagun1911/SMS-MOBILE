@@ -1,29 +1,42 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
   Linking,
 } from "react-native";
 import studentApi from "@/lib/studentApi";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 export default function StudentHomeworkScreen() {
   const [homework, setHomework] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const loadHomework = useCallback(async () => {
+    const res = await studentApi.get("/homework/student");
+    setHomework(res.data.data ?? []);
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
-        const res = await studentApi.get("/homework/student");
-        setHomework(res.data.data ?? []);
-      } catch (_) {}
-      finally {
+        setLoading(true);
+        await loadHomework();
+      } catch (_) {
+      } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [loadHomework]);
+
+  const pullReload = useCallback(async () => {
+    try {
+      await loadHomework();
+    } catch (_) {}
+  }, [loadHomework]);
+  useRegisterScreenRefresh(pullReload);
 
   const now = new Date();
   const pending = homework.filter((h: any) => !h.dueDate || new Date(h.dueDate) >= now);
@@ -77,7 +90,7 @@ export default function StudentHomeworkScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Homework</Text>
       <Text style={styles.subtitle}>All assignments for your class</Text>
 
@@ -100,7 +113,7 @@ export default function StudentHomeworkScreen() {
       {homework.length === 0 && (
         <Text style={styles.empty}>No homework assigned yet.</Text>
       )}
-    </ScrollView>
+    </RefreshableScrollView>
   );
 }
 

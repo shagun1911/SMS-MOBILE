@@ -5,7 +5,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
   Image,
   Modal,
@@ -15,6 +14,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useStudentAuthStore } from "@/store/studentAuthStore";
 import studentApi from "@/lib/studentApi";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 const GLOBAL_NOTIF_SEEN_KEY = "sms_global_notif_seen_ids";
 
@@ -140,40 +141,53 @@ export default function StudentDashboard() {
   const [showNotifs, setShowNotifs] = useState(false);
   const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
 
-  // ── Fetch data ───────────────────────────────────────────────────
-  useEffect(() => {
-    (async () => {
+  const loadDashboard = useCallback(async () => {
+    try {
+      const [fRes, hRes, rRes, nRes, storedRaw] = await Promise.all([
+        studentApi.get("/fees/student/me"),
+        studentApi.get("/homework/student"),
+        studentApi.get("/exams/student/results"),
+        studentApi.get("/student-notifications").catch(() => ({ data: { data: [] } })),
+        AsyncStorage.getItem(GLOBAL_NOTIF_SEEN_KEY),
+      ]);
+      setFees(fRes.data.data);
+      setHomework(hRes.data.data ?? []);
+      setResults(rRes.data.data ?? []);
+      const inboxRaw = nRes.data?.data ?? nRes.data ?? [];
+      setStudentInbox(Array.isArray(inboxRaw) ? inboxRaw : []);
+      if (storedRaw) setSeenIds(new Set(JSON.parse(storedRaw)));
+    } catch {
+      // keep prior state on partial failure
+    }
+    if (student?.schoolCode) {
       try {
-        const [fRes, hRes, rRes, nRes, storedRaw] = await Promise.all([
-          studentApi.get("/fees/student/me"),
-          studentApi.get("/homework/student"),
-          studentApi.get("/exams/student/results"),
-          studentApi.get("/student-notifications").catch(() => ({ data: { data: [] } })),
-          AsyncStorage.getItem(GLOBAL_NOTIF_SEEN_KEY),
-        ]);
-        setFees(fRes.data.data);
-        setHomework(hRes.data.data ?? []);
-        setResults(rRes.data.data ?? []);
-        const inboxRaw = nRes.data?.data ?? nRes.data ?? [];
-        setStudentInbox(Array.isArray(inboxRaw) ? inboxRaw : []);
-        if (storedRaw) setSeenIds(new Set(JSON.parse(storedRaw)));
-      } catch (_) {}
-      finally { setLoading(false); }
-    })();
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        if (!student?.schoolCode) return;
         const res = await studentApi.get(`/schools/public/${student.schoolCode}`);
         const data = res.data?.data ?? res.data;
-        if (!cancelled && data?.logo) setSchoolLogo(data.logo as string);
-      } catch {}
+        if (data?.logo) setSchoolLogo(data.logo as string);
+      } catch {
+        // keep previous logo
+      }
+    }
+  }, [student?.schoolCode]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        await loadDashboard();
+      } catch (_) {
+      } finally {
+        setLoading(false);
+      }
     })();
-    return () => { cancelled = true; };
-  }, []);
+  }, [loadDashboard]);
+
+  const pullReload = useCallback(async () => {
+    try {
+      await loadDashboard();
+    } catch (_) {}
+  }, [loadDashboard]);
+  useRegisterScreenRefresh(pullReload);
 
   // ── Notification list ────────────────────────────────────────────
   const notifications = useMemo(
@@ -219,7 +233,7 @@ export default function StudentDashboard() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
 
       {/* ── HEADER ── */}
       <SafeAreaView style={styles.header} edges={["top"]}>
@@ -368,7 +382,7 @@ export default function StudentDashboard() {
         ))}
       </View>
 
-    </ScrollView>
+    </RefreshableScrollView>
   );
 }
 

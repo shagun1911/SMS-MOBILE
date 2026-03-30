@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { useAuthStore } from "@/store/authStore";
 import { useStudentAuthStore } from "@/store/studentAuthStore";
+import { GlobalRefreshProvider } from "@/contexts/GlobalRefreshContext";
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
@@ -25,9 +26,9 @@ export default function RootLayout() {
   }
 
   return (
-    <>
+    <GlobalRefreshProvider>
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false }} />
-    </>
+    </GlobalRefreshProvider>
   );
 }

@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
   TouchableOpacity,
   Modal,
@@ -11,6 +10,8 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import studentApi from "@/lib/studentApi";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 const NOTIF_SEEN_KEY = "sms_fees_notif_seen_ids";
 
@@ -44,22 +45,36 @@ export default function StudentFeesScreen() {
   const [showNotifs, setShowNotifs] = useState(false);
   const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
 
+  const loadFees = useCallback(async () => {
+    const [res, stored] = await Promise.all([
+      studentApi.get("/fees/student/me"),
+      AsyncStorage.getItem(NOTIF_SEEN_KEY),
+    ]);
+    setFeeData(res.data.data);
+    if (stored) setSeenIds(new Set(JSON.parse(stored)));
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
-        const [res, stored] = await Promise.all([
-          studentApi.get("/fees/student/me"),
-          AsyncStorage.getItem(NOTIF_SEEN_KEY),
-        ]);
-        setFeeData(res.data.data);
-        if (stored) setSeenIds(new Set(JSON.parse(stored)));
+        setLoading(true);
+        await loadFees();
       } catch (e) {
         console.log("Fee fetch error:", e);
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [loadFees]);
+
+  const pullReload = useCallback(async () => {
+    try {
+      await loadFees();
+    } catch {
+      // keep existing feeData
+    }
+  }, [loadFees]);
+  useRegisterScreenRefresh(pullReload);
 
   const markAllSeen = useCallback(async (ids: string[]) => {
     const updated = new Set(ids);
@@ -192,7 +207,7 @@ export default function StudentFeesScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* ── Title row with notification bell ── */}
       <View style={styles.titleRow}>
         <View>
@@ -458,7 +473,7 @@ export default function StudentFeesScreen() {
           <Text style={styles.alertText}>Bring your admission number when visiting the fee department.</Text>
         </View>
       )}
-    </ScrollView>
+    </RefreshableScrollView>
   );
 }
 

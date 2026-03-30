@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 export default function TeacherDashboard() {
   const router = useRouter();
@@ -44,70 +46,70 @@ export default function TeacherDashboard() {
   const [notifError, setNotifError] = useState<string | null>(null);
   const [notifItems, setNotifItems] = useState<TeacherNotification[]>([]);
 
+  const loadDashboard = useCallback(async () => {
+    try {
+      const [cRes, hRes, eRes] = await Promise.all([
+        api.get("/classes"),
+        api.get("/homework"),
+        api.get("/exams"),
+      ]);
+      setClasses(cRes.data.data ?? []);
+      setHomework(hRes.data.data ?? []);
+      setExams(eRes.data.data ?? []);
+    } catch {
+      // keep prior lists
+    }
+
+    try {
+      setNotifLoading(true);
+      setNotifError(null);
+      const res = await api.get("/user-notifications");
+      const data = res.data?.data ?? res.data ?? [];
+      const list = Array.isArray(data) ? data : [];
+      const normalized: TeacherNotification[] = list.map((n: any) => ({
+        id: String(n._id),
+        title: String(n.title ?? "Notification"),
+        message: String(n.message ?? ""),
+        createdAt: String(n.createdAt ?? new Date().toISOString()),
+        type: String(n.type ?? "general"),
+        read: Boolean(n.isRead),
+      }));
+      setNotifItems(normalized.slice(0, 50));
+    } catch (e: any) {
+      setNotifError(e?.response?.data?.message ?? "Unable to load notifications.");
+    } finally {
+      setNotifLoading(false);
+    }
+
+    try {
+      const res = await api.get("/schools/me");
+      const data = res.data?.data ?? res.data;
+      if (data?.logo) setSchoolLogo(data.logo);
+      if (data?.name) setSchoolName(data.name);
+    } catch {
+      // keep prior school branding
+    }
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
-        const [cRes, hRes, eRes] = await Promise.all([
-          api.get("/classes"),
-          api.get("/homework"),
-          api.get("/exams"),
-        ]);
-        setClasses(cRes.data.data ?? []);
-        setHomework(hRes.data.data ?? []);
-        setExams(eRes.data.data ?? []);
+        setLoading(true);
+        await loadDashboard();
       } catch {
-        // ignore list errors for dashboard
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [loadDashboard]);
 
-  // Load teacher notifications on mount (salary + bonus/adjustment)
-  useEffect(() => {
-    (async () => {
-      try {
-        setNotifLoading(true);
-        setNotifError(null);
-        const res = await api.get("/user-notifications");
-        const data = res.data?.data ?? res.data ?? [];
-        const list = Array.isArray(data) ? data : [];
-        const normalized: TeacherNotification[] = list.map((n: any) => ({
-          id: String(n._id),
-          title: String(n.title ?? "Notification"),
-          message: String(n.message ?? ""),
-          createdAt: String(n.createdAt ?? new Date().toISOString()),
-          type: String(n.type ?? "general"),
-          read: Boolean(n.isRead),
-        }));
-        setNotifItems(normalized.slice(0, 50));
-      } catch (e: any) {
-        setNotifError(
-          e?.response?.data?.message ?? "Unable to load notifications."
-        );
-      } finally {
-        setNotifLoading(false);
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await api.get("/schools/me");
-        const data = res.data?.data ?? res.data;
-        if (cancelled) return;
-        if (data?.logo) setSchoolLogo(data.logo);
-        if (data?.name) setSchoolName(data.name);
-      } catch {
-        // ignore logo/school name errors
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const pullReload = useCallback(async () => {
+    try {
+      await loadDashboard();
+    } catch {
+    }
+  }, [loadDashboard]);
+  useRegisterScreenRefresh(pullReload);
 
   const pendingHomework = useMemo(
     () => homework.filter((h: any) => !h.isCompleted),
@@ -126,7 +128,7 @@ export default function TeacherDashboard() {
   ];
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Header (safe area) */}
       <SafeAreaView style={styles.header} edges={["top"]}>
         <View style={styles.headerRow}>
@@ -332,7 +334,7 @@ export default function TeacherDashboard() {
         ))}
       </View>
 
-    </ScrollView>
+    </RefreshableScrollView>
   );
 }
 

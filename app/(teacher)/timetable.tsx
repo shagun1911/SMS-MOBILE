@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import api from "@/lib/api";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -61,17 +63,60 @@ export default function TeacherTimetableScreen() {
     );
   }, [classes, selectedClass, selectedSection]);
 
+  const loadClasses = useCallback(async () => {
+    const res = await api.get("/classes");
+    setClasses(res.data.data ?? []);
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
-        const res = await api.get("/classes");
-        setClasses(res.data.data ?? []);
-      } catch (_) {}
-      finally {
+        setLoading(true);
+        await loadClasses();
+      } catch (_) {
+      } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [loadClasses]);
+
+  const pullReload = useCallback(async () => {
+    try {
+      const res = await api.get("/classes");
+      const list = res.data.data ?? [];
+      setClasses(list);
+      if (!selectedClass || !selectedSection) {
+        setTimetable([]);
+        setFetchError(null);
+        return;
+      }
+      const secU = String(selectedSection).trim().toUpperCase();
+      const doc = list.find(
+        (c: any) =>
+          String(c.className) === selectedClass &&
+          String(c.section ?? "").trim().toUpperCase() === secU
+      );
+      if (!doc?._id) {
+        setTimetable([]);
+        return;
+      }
+      setFetchError(null);
+      const tr = await api.get(
+        `/timetable/class/${doc._id}?section=${encodeURIComponent(secU)}`
+      );
+      const payload = tr.data?.data;
+      const days = payload?.days;
+      setTimetable(Array.isArray(days) ? days : []);
+    } catch (e: any) {
+      const msg =
+        e?.response?.data?.message ??
+        e?.message ??
+        "Network error — check API URL (phone vs localhost).";
+      setFetchError(msg);
+      setTimetable([]);
+    }
+  }, [selectedClass, selectedSection]);
+  useRegisterScreenRefresh(pullReload);
 
   useEffect(() => {
     if (!selectedClassDoc?._id || !selectedSection) {
@@ -142,7 +187,7 @@ export default function TeacherTimetableScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
         <Text style={styles.title}>Timetable</Text>
         <Text style={styles.subtitle}>Select class and section</Text>
 
@@ -221,7 +266,7 @@ export default function TeacherTimetableScreen() {
             })}
           </View>
         )}
-      </ScrollView>
+      </RefreshableScrollView>
     </SafeAreaView>
   );
 }

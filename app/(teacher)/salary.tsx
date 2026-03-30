@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import api from "@/lib/api";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 type SalaryRecord = {
   _id: string;
@@ -32,6 +34,7 @@ type TeacherNotification = {
     amount?: number;
     title?: string;
     date?: string;
+    otherPaymentId?: string;
   };
 };
 
@@ -77,53 +80,66 @@ export default function TeacherSalaryScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const loadSalary = useCallback(async () => {
+    const [salaryRes, extraRes, notifRes] = await Promise.all([
+      api.get("/salaries/my/history"),
+      api.get("/salary-other-payments/me").catch(() => ({ data: { data: [] } })),
+      api.get("/user-notifications").catch(() => ({ data: { data: [] } })),
+    ]);
+    const salaryData = salaryRes.data?.data ?? salaryRes.data ?? [];
+    const extraDataRaw = extraRes.data?.data ?? extraRes.data ?? [];
+    const notifDataRaw = notifRes.data?.data ?? notifRes.data ?? [];
+    const extraData: OtherPayment[] = Array.isArray(extraDataRaw) ? extraDataRaw : [];
+    const notifications: TeacherNotification[] = Array.isArray(notifDataRaw) ? notifDataRaw : [];
+
+    const fromNotifications: OtherPayment[] = notifications
+      .filter((n) => n?.metadata?.category === "other_payment")
+      .map((n) => {
+        const md = n.metadata || {};
+        return {
+          _id: String(md?.otherPaymentId ?? n._id ?? `${Date.now()}-${Math.random()}`),
+          title: String(md.title ?? n.title ?? "Bonus/Adjustment"),
+          amount: Number(md.amount ?? 0),
+          type: md.paymentType === "adjustment" ? "adjustment" : "bonus",
+          date: String(md.date ?? (n as any).createdAt ?? new Date().toISOString()),
+        } as OtherPayment;
+      })
+      .filter((p) => !!p.amount && !!p.date);
+
+    const mergedMap = new Map<string, OtherPayment>();
+    [...fromNotifications, ...extraData].forEach((p) => {
+      const k = `${p.type}|${p.title}|${p.amount}|${new Date(p.date).toISOString()}`;
+      if (!mergedMap.has(k)) mergedMap.set(k, p);
+    });
+    const mergedExtras = [...mergedMap.values()];
+
+    setRecords(Array.isArray(salaryData) ? salaryData : []);
+    setOtherPayments(mergedExtras);
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
-        const [salaryRes, extraRes, notifRes] = await Promise.all([
-          api.get("/salaries/my/history"),
-          api.get("/salary-other-payments/me").catch(() => ({ data: { data: [] } })),
-          api.get("/user-notifications").catch(() => ({ data: { data: [] } })),
-        ]);
-        const salaryData = salaryRes.data?.data ?? salaryRes.data ?? [];
-        const extraDataRaw = extraRes.data?.data ?? extraRes.data ?? [];
-        const notifDataRaw = notifRes.data?.data ?? notifRes.data ?? [];
-        const extraData: OtherPayment[] = Array.isArray(extraDataRaw) ? extraDataRaw : [];
-        const notifications: TeacherNotification[] = Array.isArray(notifDataRaw) ? notifDataRaw : [];
-
-        // Fallback source: derive bonus/adjustment transactions from notification metadata
-        // so month cards still show bonus lines even if /salary-other-payments/me is unavailable.
-        const fromNotifications: OtherPayment[] = notifications
-          .filter((n) => n?.metadata?.category === "other_payment")
-          .map((n) => {
-            const md = n.metadata || {};
-            return {
-              _id: String(md?.otherPaymentId ?? n._id ?? `${Date.now()}-${Math.random()}`),
-              title: String(md.title ?? n.title ?? "Bonus/Adjustment"),
-              amount: Number(md.amount ?? 0),
-              type: md.paymentType === "adjustment" ? "adjustment" : "bonus",
-              date: String(md.date ?? (n as any).createdAt ?? new Date().toISOString()),
-            } as OtherPayment;
-          })
-          .filter((p) => !!p.amount && !!p.date);
-
-        // Merge endpoint data + notification-derived fallback, de-duplicated by key
-        const mergedMap = new Map<string, OtherPayment>();
-        [...fromNotifications, ...extraData].forEach((p) => {
-          const k = `${p.type}|${p.title}|${p.amount}|${new Date(p.date).toISOString()}`;
-          if (!mergedMap.has(k)) mergedMap.set(k, p);
-        });
-        const mergedExtras = [...mergedMap.values()];
-
-        setRecords(Array.isArray(salaryData) ? salaryData : []);
-        setOtherPayments(mergedExtras);
+        setLoading(true);
+        setError(null);
+        await loadSalary();
       } catch (e: any) {
         setError(e?.response?.data?.message ?? "Unable to load salary history.");
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [loadSalary]);
+
+  const pullReload = useCallback(async () => {
+    try {
+      setError(null);
+      await loadSalary();
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? "Unable to load salary history.");
+    }
+  }, [loadSalary]);
+  useRegisterScreenRefresh(pullReload);
 
   const extrasByMonth = useMemo(() => {
     const map = new Map<string, OtherPayment[]>();
@@ -219,7 +235,7 @@ export default function TeacherSalaryScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
         <Text style={styles.title}>Salary History</Text>
         <Text style={styles.subtitle}>Monthly payroll and one-time bonuses & adjustments.</Text>
 
@@ -303,7 +319,7 @@ export default function TeacherSalaryScreen() {
             </View>
           );
         })}
-      </ScrollView>
+      </RefreshableScrollView>
     </SafeAreaView>
   );
 }

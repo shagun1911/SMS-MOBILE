@@ -1,16 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
-  RefreshControl,
   TouchableOpacity,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import studentApi from "@/lib/studentApi";
+import { AttendanceMonthCalendar } from "@/components/AttendanceMonthCalendar";
+import { buildAbsentYmdSet } from "@/lib/absentDates";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 function formatWhen(iso: string) {
   try {
@@ -25,8 +27,15 @@ export default function StudentAttendanceScreen() {
   const router = useRouter();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const initialMonth = useMemo(() => {
+    const n = new Date();
+    return { year: n.getFullYear(), monthIndex: n.getMonth() };
+  }, []);
+
+  const [viewYear, setViewYear] = useState(initialMonth.year);
+  const [viewMonthIndex, setViewMonthIndex] = useState(initialMonth.monthIndex);
 
   const load = useCallback(async () => {
     setError(null);
@@ -44,30 +53,46 @@ export default function StudentAttendanceScreen() {
       .finally(() => setLoading(false));
   }, [load]);
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
+  const absentYmdSet = useMemo(() => buildAbsentYmdSet(items), [items]);
+
+  const pullReload = useCallback(async () => {
     try {
       await load();
     } catch (e: any) {
       setError(e?.response?.data?.message ?? e?.message ?? "Could not load.");
-    } finally {
-      setRefreshing(false);
     }
   }, [load]);
+  useRegisterScreenRefresh(pullReload);
+
+  const goPrevMonth = useCallback(() => {
+    setViewMonthIndex((m) => {
+      if (m === 0) {
+        setViewYear((y) => y - 1);
+        return 11;
+      }
+      return m - 1;
+    });
+  }, []);
+
+  const goNextMonth = useCallback(() => {
+    setViewMonthIndex((m) => {
+      if (m === 11) {
+        setViewYear((y) => y + 1);
+        return 0;
+      }
+      return m + 1;
+    });
+  }, []);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
+      <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
         <TouchableOpacity style={styles.backRow} onPress={() => router.back()} activeOpacity={0.7}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Attendance</Text>
         <Text style={styles.sub}>
-          When a teacher marks you absent, you will see it below. Present days are not listed.
+          Days you were marked absent are highlighted on the calendar. Use the arrows to view other months.
         </Text>
 
         {loading ? (
@@ -78,22 +103,38 @@ export default function StudentAttendanceScreen() {
           <View style={styles.bannerErr}>
             <Text style={styles.bannerErrText}>{error}</Text>
           </View>
-        ) : !items.length ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyIcon}>✓</Text>
-            <Text style={styles.emptyTitle}>No absence records</Text>
-            <Text style={styles.emptySub}>You have not been marked absent recently.</Text>
-          </View>
         ) : (
-          items.map((n) => (
-            <View key={String(n._id)} style={styles.card}>
-              <Text style={styles.cardTitle}>{String(n.title ?? "Attendance")}</Text>
-              <Text style={styles.cardBody}>{String(n.message ?? "")}</Text>
-              <Text style={styles.cardMeta}>{formatWhen(String(n.createdAt ?? ""))}</Text>
-            </View>
-          ))
+          <>
+            <AttendanceMonthCalendar
+              year={viewYear}
+              monthIndex={viewMonthIndex}
+              absentYmdSet={absentYmdSet}
+              onPrevMonth={goPrevMonth}
+              onNextMonth={goNextMonth}
+            />
+
+            {items.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyIcon}>✓</Text>
+                <Text style={styles.emptyTitle}>No absence records</Text>
+                <Text style={styles.emptySub}>You have not been marked absent in the records we have.</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.sectionTitle}>Notices</Text>
+                <Text style={styles.sectionSub}>Messages when you were marked absent.</Text>
+                {items.map((n) => (
+                  <View key={String(n._id)} style={styles.card}>
+                    <Text style={styles.cardTitle}>{String(n.title ?? "Attendance")}</Text>
+                    <Text style={styles.cardBody}>{String(n.message ?? "")}</Text>
+                    <Text style={styles.cardMeta}>{formatWhen(String(n.createdAt ?? ""))}</Text>
+                  </View>
+                ))}
+              </>
+            )}
+          </>
         )}
-      </ScrollView>
+      </RefreshableScrollView>
     </SafeAreaView>
   );
 }
@@ -126,6 +167,13 @@ const styles = StyleSheet.create({
   emptyIcon: { fontSize: 40, marginBottom: 8, color: "#16a34a" },
   emptyTitle: { fontSize: 16, fontWeight: "700", color: "#166534" },
   emptySub: { fontSize: 13, color: "#15803d", marginTop: 6, textAlign: "center" },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginBottom: 4,
+  },
+  sectionSub: { fontSize: 12, color: "#94a3b8", marginBottom: 12 },
   card: {
     backgroundColor: "#fff",
     borderRadius: 14,

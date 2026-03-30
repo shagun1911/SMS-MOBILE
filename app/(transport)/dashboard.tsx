@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,8 @@ import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
 import { useRouter } from "expo-router";
 import { matchStaffMemberId } from "@/lib/transportStaff";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 type CrewMember = { _id: string; name: string; phone?: string };
 
@@ -57,16 +59,17 @@ export default function TransportDashboard() {
   const [assigning, setAssigning] = useState(false);
   const [unassigningId, setUnassigningId] = useState<string | null>(null);
 
-  const fetchFleet = async () => {
+  const fetchFleet = useCallback(async () => {
     const res = await api.get("/transport");
     const list = res.data?.data ?? res.data ?? [];
     setFleet(Array.isArray(list) ? list : []);
-  };
+  }, []);
 
   useEffect(() => {
     (async () => {
       try {
         setLoading(true);
+        setError(null);
         await fetchFleet();
       } catch (e: any) {
         setError(e?.response?.data?.message ?? "Unable to load buses.");
@@ -74,7 +77,47 @@ export default function TransportDashboard() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [fetchFleet]);
+
+  const pullReload = useCallback(async () => {
+    try {
+      setError(null);
+      await fetchFleet();
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? "Unable to load buses.");
+    }
+    if (selectedBusId) {
+      try {
+        const res = await api.get(`/transport/${selectedBusId}/details`);
+        const payload = res.data?.data ?? res.data;
+        setBusDetails(payload);
+        const b = payload?.bus;
+        if (b) {
+          setDriverStaffId(
+            b.driverUserId
+              ? String(b.driverUserId)
+              : matchStaffMemberId(crewDrivers, b.driverName, b.driverPhone)
+          );
+          setConductorStaffId(
+            b.conductorUserId
+              ? String(b.conductorUserId)
+              : matchStaffMemberId(crewConductors, b.conductorName, b.conductorPhone)
+          );
+          setBusNumber(b.busNumber ?? "");
+          setRegistrationNumber(b.registrationNumber ?? "");
+          setRouteName(b.routeName ?? "");
+          setCapacity(b.capacity != null ? String(b.capacity) : "");
+          setDriverName(b.driverName ?? "");
+          setDriverPhone(b.driverPhone ?? "");
+          setConductorName(b.conductorName ?? "");
+          setConductorPhone(b.conductorPhone ?? "");
+        }
+      } catch {
+        // keep prior details
+      }
+    }
+  }, [fetchFleet, selectedBusId, crewDrivers, crewConductors]);
+  useRegisterScreenRefresh(pullReload);
 
   const mapCrew = (list: any[]): CrewMember[] =>
     (Array.isArray(list) ? list : []).map((u) => ({
@@ -264,7 +307,7 @@ export default function TransportDashboard() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
       <SafeAreaView style={styles.header} edges={["top"]}>
         <View style={styles.headerRow}>
           <TouchableOpacity
@@ -788,7 +831,7 @@ export default function TransportDashboard() {
           </Pressable>
         </Pressable>
       </Modal>
-    </ScrollView>
+    </RefreshableScrollView>
   );
 }
 

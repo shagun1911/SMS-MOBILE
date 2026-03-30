@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
   Modal,
   FlatList,
@@ -12,6 +11,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import api from "@/lib/api";
+import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 export default function TeacherClassesScreen() {
   const router = useRouter();
@@ -21,20 +22,12 @@ export default function TeacherClassesScreen() {
   const [students, setStudents] = useState<any[]>([]);
   const [studentsLoading, setStudentsLoading] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await api.get("/classes");
-        setClasses(res.data.data ?? []);
-      } catch (_) {}
-      finally {
-        setLoading(false);
-      }
-    })();
+  const loadClasses = useCallback(async () => {
+    const res = await api.get("/classes");
+    setClasses(res.data.data ?? []);
   }, []);
 
-  const openClass = async (cls: any) => {
-    setSelected(cls);
+  const fetchStudents = useCallback(async (cls: any) => {
     setStudentsLoading(true);
     try {
       const res = await api.get(`/classes/${cls._id}/students`);
@@ -44,6 +37,37 @@ export default function TeacherClassesScreen() {
     } finally {
       setStudentsLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        await loadClasses();
+      } catch (_) {
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [loadClasses]);
+
+  const pullReload = useCallback(async () => {
+    try {
+      await loadClasses();
+    } catch (_) {
+    }
+    if (selected) {
+      try {
+        await fetchStudents(selected);
+      } catch (_) {
+      }
+    }
+  }, [loadClasses, selected, fetchStudents]);
+  useRegisterScreenRefresh(pullReload);
+
+  const openClass = async (cls: any) => {
+    setSelected(cls);
+    await fetchStudents(cls);
   };
 
   const sec = (cls: any) => cls.section ?? cls.sections?.[0] ?? "A";
@@ -71,7 +95,7 @@ export default function TeacherClassesScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
         <Text style={styles.title}>My Classes</Text>
         <Text style={styles.subtitle}>Tap a class to view students</Text>
         {classes.map((cls) => (
@@ -144,7 +168,7 @@ export default function TeacherClassesScreen() {
             </View>
           </View>
         </Modal>
-      </ScrollView>
+      </RefreshableScrollView>
     </SafeAreaView>
   );
 }
