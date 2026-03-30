@@ -116,6 +116,7 @@ export default function TeacherDashboard() {
 
   const featureCards = [
     { icon: "👥", title: "My Classes", route: "/(teacher)/classes", accent: "#4f46e5", bg: "#eef2ff" },
+    { icon: "📋", title: "Attendance", route: "/(teacher)/attendance", accent: "#db2777", bg: "#fdf2f8" },
     { icon: "📚", title: "Homework", route: "/(teacher)/homework", accent: "#16a34a", bg: "#f0fdf4" },
     { icon: "📊", title: "Enter Marks", route: "/(teacher)/marks", accent: "#0891b2", bg: "#ecfeff" },
     { icon: "💵", title: "Salary", route: "/(teacher)/salary", accent: "#16a34a", bg: "#ecfdf3" },

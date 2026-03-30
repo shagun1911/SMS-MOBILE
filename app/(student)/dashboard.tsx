@@ -29,7 +29,7 @@ function formatAmount(n: number) {
 // ── Notification type ─────────────────────────────────────────────────────────
 type Notif = {
   id: string;
-  category: "fee" | "homework" | "marks" | "attendance";
+  category: "fee" | "homework" | "marks" | "attendance" | "school";
   icon: string;
   title: string;
   subtitle: string;
@@ -39,7 +39,28 @@ type Notif = {
 };
 
 // ── Build notifications from raw API data ─────────────────────────────────────
-function buildNotifications(fees: any, homework: any[], results: any[]): Notif[] {
+function mapStudentInboxRows(raw: any[]): Notif[] {
+  const list: Notif[] = [];
+  for (const n of raw) {
+    const id = String(n?._id ?? "");
+    if (!id) continue;
+    const t = String(n?.type ?? "general");
+    const isAbsent = t === "attendance_absent";
+    list.push({
+      id: `inbox-${id}`,
+      category: isAbsent ? "attendance" : "school",
+      icon: isAbsent ? "📋" : "📣",
+      title: String(n?.title ?? "Notification"),
+      subtitle: String(n?.message ?? ""),
+      date: String(n?.createdAt ?? new Date().toISOString()),
+      accentColor: isAbsent ? "#db2777" : "#6366f1",
+      bgColor: isAbsent ? "#fdf2f8" : "#eef2ff",
+    });
+  }
+  return list;
+}
+
+function buildNotifications(fees: any, homework: any[], results: any[], studentInbox: any[] = []): Notif[] {
   const list: Notif[] = [];
 
   // 1. Fee payment events from the StudentFee ledger sub-payments
@@ -95,7 +116,7 @@ function buildNotifications(fees: any, homework: any[], results: any[]): Notif[]
     });
   }
 
-  // 4. Attendance placeholder — no API yet; skip silently.
+  list.push(...mapStudentInboxRows(studentInbox));
 
   // Sort most-recent first
   list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -111,6 +132,7 @@ export default function StudentDashboard() {
   const [fees, setFees] = useState<any>(null);
   const [homework, setHomework] = useState<any[]>([]);
   const [results, setResults] = useState<any[]>([]);
+  const [studentInbox, setStudentInbox] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
 
@@ -122,15 +144,18 @@ export default function StudentDashboard() {
   useEffect(() => {
     (async () => {
       try {
-        const [fRes, hRes, rRes, storedRaw] = await Promise.all([
+        const [fRes, hRes, rRes, nRes, storedRaw] = await Promise.all([
           studentApi.get("/fees/student/me"),
           studentApi.get("/homework/student"),
           studentApi.get("/exams/student/results"),
+          studentApi.get("/student-notifications").catch(() => ({ data: { data: [] } })),
           AsyncStorage.getItem(GLOBAL_NOTIF_SEEN_KEY),
         ]);
         setFees(fRes.data.data);
         setHomework(hRes.data.data ?? []);
         setResults(rRes.data.data ?? []);
+        const inboxRaw = nRes.data?.data ?? nRes.data ?? [];
+        setStudentInbox(Array.isArray(inboxRaw) ? inboxRaw : []);
         if (storedRaw) setSeenIds(new Set(JSON.parse(storedRaw)));
       } catch (_) {}
       finally { setLoading(false); }
@@ -152,8 +177,8 @@ export default function StudentDashboard() {
 
   // ── Notification list ────────────────────────────────────────────
   const notifications = useMemo(
-    () => buildNotifications(fees, homework, results),
-    [fees, homework, results]
+    () => buildNotifications(fees, homework, results, studentInbox),
+    [fees, homework, results, studentInbox]
   );
 
   const unreadCount = useMemo(
@@ -190,6 +215,7 @@ export default function StudentDashboard() {
     homework: "Homework",
     marks: "Marks",
     attendance: "Attendance",
+    school: "School",
   };
 
   return (
@@ -254,7 +280,7 @@ export default function StudentDashboard() {
               <View>
                 <Text style={styles.sheetTitle}>Notifications</Text>
                 <Text style={styles.sheetSub}>
-                  {notifications.length} total · all updates in one place
+                  {notifications.length} total · fees, homework, results & attendance
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setShowNotifs(false)} style={styles.closeBtn}>
@@ -267,7 +293,7 @@ export default function StudentDashboard() {
                 <Text style={{ fontSize: 36, marginBottom: 10 }}>🔔</Text>
                 <Text style={styles.emptyText}>No notifications yet</Text>
                 <Text style={styles.emptySub}>
-                  Fee updates, homework, and results will appear here.
+                  Fee updates, homework, results, and absence alerts will appear here.
                 </Text>
               </View>
             ) : (
