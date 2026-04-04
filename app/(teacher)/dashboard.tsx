@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -41,10 +41,33 @@ export default function TeacherDashboard() {
     read: boolean;
   };
 
+  /** IDs marked read in-session so the bell badge stays cleared if a refetch races ahead of PATCH. */
+  const optimisticReadIdsRef = useRef<Set<string>>(new Set());
+
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
   const [notifError, setNotifError] = useState<string | null>(null);
   const [notifItems, setNotifItems] = useState<TeacherNotification[]>([]);
+
+  const normalizeNotifications = useCallback((list: any[]): TeacherNotification[] => {
+    const out: TeacherNotification[] = [];
+    for (const n of list) {
+      const id = String(n._id ?? n.id ?? "");
+      if (!id) continue;
+      const serverRead = n.isRead === true || n.read === true;
+      if (serverRead) optimisticReadIdsRef.current.delete(id);
+      const read = serverRead || optimisticReadIdsRef.current.has(id);
+      out.push({
+        id,
+        title: String(n.title ?? "Notification"),
+        message: String(n.message ?? ""),
+        createdAt: String(n.createdAt ?? new Date().toISOString()),
+        type: String(n.type ?? "general"),
+        read,
+      });
+    }
+    return out;
+  }, []);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -66,15 +89,7 @@ export default function TeacherDashboard() {
       const res = await api.get("/user-notifications");
       const data = res.data?.data ?? res.data ?? [];
       const list = Array.isArray(data) ? data : [];
-      const normalized: TeacherNotification[] = list.map((n: any) => ({
-        id: String(n._id),
-        title: String(n.title ?? "Notification"),
-        message: String(n.message ?? ""),
-        createdAt: String(n.createdAt ?? new Date().toISOString()),
-        type: String(n.type ?? "general"),
-        read: Boolean(n.isRead),
-      }));
-      setNotifItems(normalized.slice(0, 50));
+      setNotifItems(normalizeNotifications(list).slice(0, 50));
     } catch (e: any) {
       setNotifError(e?.response?.data?.message ?? "Unable to load notifications.");
     } finally {
@@ -89,7 +104,23 @@ export default function TeacherDashboard() {
     } catch {
       // keep prior school branding
     }
-  }, []);
+  }, [normalizeNotifications]);
+
+  const unreadNotifCount = useMemo(
+    () => notifItems.filter((n) => !n.read).length,
+    [notifItems]
+  );
+
+  /** Modal lists only unread items; read ones disappear after tap or “mark all”. */
+  const unreadNotifItems = useMemo(
+    () => notifItems.filter((n) => !n.read),
+    [notifItems]
+  );
+
+  const teacherId = user?._id;
+  useEffect(() => {
+    optimisticReadIdsRef.current.clear();
+  }, [teacherId]);
 
   useEffect(() => {
     (async () => {
@@ -160,10 +191,10 @@ export default function TeacherDashboard() {
               }}
             >
               <Text style={styles.iconButtonEmoji}>🔔</Text>
-              {!!notifItems.filter((n) => !n.read).length && (
+              {unreadNotifCount > 0 && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>
-                    {Math.min(9, notifItems.filter((n) => !n.read).length)}
+                    {Math.min(9, unreadNotifCount)}
                   </Text>
                 </View>
               )}
@@ -199,16 +230,19 @@ export default function TeacherDashboard() {
           >
             <Text style={styles.modalTitle}>Notifications</Text>
             <Text style={styles.modalSubtitle}>
-              Latest salary and account updates.
+              Unread salary and account updates only.
             </Text>
 
-            {!!notifItems.filter((n) => !n.read).length && (
+            {unreadNotifCount > 0 && (
               <TouchableOpacity
                 style={styles.markAllButton}
                 onPress={() => {
-                  setNotifItems((items) =>
-                    items.map((n) => ({ ...n, read: true }))
-                  );
+                  setNotifItems((items) => {
+                    for (const n of items) {
+                      if (!n.read) optimisticReadIdsRef.current.add(n.id);
+                    }
+                    return items.map((n) => ({ ...n, read: true }));
+                  });
                   api.patch("/user-notifications/read-all").catch(() => {});
                 }}
               >
@@ -229,6 +263,11 @@ export default function TeacherDashboard() {
               <View style={styles.modalCenter}>
                 <Text style={styles.modalEmpty}>No salary updates yet.</Text>
               </View>
+            ) : unreadNotifItems.length === 0 ? (
+              <View style={styles.modalCenter}>
+                <Text style={styles.modalEmpty}>You&apos;re all caught up.</Text>
+                <Text style={styles.modalEmptySub}>No unread notifications.</Text>
+              </View>
             ) : (
               <ScrollView
                 style={[styles.notifScroll, { maxHeight: notifListMaxHeight }]}
@@ -240,7 +279,7 @@ export default function TeacherDashboard() {
                 keyboardShouldPersistTaps="handled"
                 nestedScrollEnabled
               >
-                {notifItems.map((n) => {
+                {unreadNotifItems.map((n) => {
                   const dt = new Date(n.createdAt);
                   const dateStr = dt.toLocaleDateString("en-IN", {
                     day: "2-digit",
@@ -254,36 +293,26 @@ export default function TeacherDashboard() {
                   return (
                     <TouchableOpacity
                       key={n.id}
-                      style={[
-                        styles.notifItem,
-                        !n.read && styles.notifItemUnread,
-                      ]}
+                      style={[styles.notifItem, styles.notifItemUnread]}
                       activeOpacity={0.8}
                       onPress={() => {
-                        setNotifItems((items) => {
-                          const next = items.map((it) =>
+                        optimisticReadIdsRef.current.add(n.id);
+                        setNotifItems((items) =>
+                          items.map((it) =>
                             it.id === n.id ? { ...it, read: true } : it
-                          );
-                          api.patch(`/user-notifications/${n.id}/read`).catch(() => {});
-                          return next;
-                        });
+                          )
+                        );
+                        api.patch(`/user-notifications/${n.id}/read`).catch(() => {});
                       }}
                     >
-                      <Text
-                        style={[
-                          styles.notifText,
-                          !n.read && styles.notifTextUnread,
-                        ]}
-                      >
+                      <Text style={[styles.notifText, styles.notifTextUnread]}>
                         {n.title}
                       </Text>
                       {!!n.message && <Text style={styles.notifBody}>{n.message}</Text>}
                       <Text style={styles.notifMeta}>
                         {dateStr} · {timeStr}
                       </Text>
-                      {!n.read && (
-                        <Text style={styles.unreadLabel}>Unread</Text>
-                      )}
+                      <Text style={styles.unreadLabel}>Tap to mark as read</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -508,7 +537,13 @@ const styles = StyleSheet.create({
     color: "#6b7280",
   },
   modalError: { fontSize: 12, color: "#b91c1c", textAlign: "center" },
-  modalEmpty: { fontSize: 12, color: "#6b7280", textAlign: "center" },
+  modalEmpty: { fontSize: 13, color: "#475569", textAlign: "center", fontWeight: "600" },
+  modalEmptySub: {
+    fontSize: 12,
+    color: "#94a3b8",
+    textAlign: "center",
+    marginTop: 6,
+  },
   markAllButton: {
     alignSelf: "flex-end",
     paddingHorizontal: 8,

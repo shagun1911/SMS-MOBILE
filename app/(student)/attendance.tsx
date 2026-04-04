@@ -10,7 +10,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import studentApi from "@/lib/studentApi";
 import { AttendanceMonthCalendar } from "@/components/AttendanceMonthCalendar";
-import { buildAbsentYmdSet } from "@/lib/absentDates";
+import {
+  absentYmdFromNotification,
+  buildAbsentYmdSet,
+  ymdFromParts,
+} from "@/lib/absentDates";
 import { RefreshableScrollView } from "@/components/RefreshableScrollView";
 import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
@@ -54,6 +58,13 @@ export default function StudentAttendanceScreen() {
   }, [load]);
 
   const absentYmdSet = useMemo(() => buildAbsentYmdSet(items), [items]);
+
+  /** Absence date (YYYY-MM-DD) must match today’s local date — notices are not kept after that day. */
+  const noticeItems = useMemo(() => {
+    const d = new Date();
+    const todayYmd = ymdFromParts(d.getFullYear(), d.getMonth(), d.getDate());
+    return items.filter((n) => absentYmdFromNotification(n) === todayYmd);
+  }, [items]);
 
   const pullReload = useCallback(async () => {
     try {
@@ -122,14 +133,25 @@ export default function StudentAttendanceScreen() {
             ) : (
               <>
                 <Text style={styles.sectionTitle}>Notices</Text>
-                <Text style={styles.sectionSub}>Messages when you were marked absent.</Text>
-                {items.map((n) => (
-                  <View key={String(n._id)} style={styles.card}>
-                    <Text style={styles.cardTitle}>{String(n.title ?? "Attendance")}</Text>
-                    <Text style={styles.cardBody}>{String(n.message ?? "")}</Text>
-                    <Text style={styles.cardMeta}>{formatWhen(String(n.createdAt ?? ""))}</Text>
+                <Text style={styles.sectionSub}>
+                  Shown only on the calendar day you were marked absent (not on later days).
+                </Text>
+                {noticeItems.length === 0 ? (
+                  <View style={styles.noticeEmpty}>
+                    <Text style={styles.noticeEmptyText}>No absence notice for today.</Text>
+                    <Text style={styles.noticeEmptySub}>
+                      Past absences stay on the calendar above; this list is for today only.
+                    </Text>
                   </View>
-                ))}
+                ) : (
+                  noticeItems.map((n) => (
+                    <View key={String(n._id)} style={styles.card}>
+                      <Text style={styles.cardTitle}>{String(n.title ?? "Attendance")}</Text>
+                      <Text style={styles.cardBody}>{String(n.message ?? "")}</Text>
+                      <Text style={styles.cardMeta}>{formatWhen(String(n.createdAt ?? ""))}</Text>
+                    </View>
+                  ))
+                )}
               </>
             )}
           </>
@@ -174,6 +196,16 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   sectionSub: { fontSize: 12, color: "#94a3b8", marginBottom: 12 },
+  noticeEmpty: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 14,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    marginBottom: 8,
+  },
+  noticeEmptyText: { fontSize: 14, fontWeight: "600", color: "#475569" },
+  noticeEmptySub: { fontSize: 12, color: "#94a3b8", marginTop: 6, lineHeight: 17 },
   card: {
     backgroundColor: "#fff",
     borderRadius: 14,

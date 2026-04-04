@@ -14,11 +14,10 @@ import {
 } from "react-native";
 import api from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
+import { isCrewRole } from "@/lib/crewRoles";
+import { AUTH_PORTAL_CREW, STAFF_HOME_ROUTES } from "@/lib/staffPortalConfig";
 
-/** Only teachers may use this app (other staff have separate flows, e.g. Transport). */
-const TEACHER_APP_ROLE = "teacher";
-
-export default function TeacherLoginScreen() {
+export default function CrewLoginScreen() {
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
   const [phoneOrEmail, setPhoneOrEmail] = useState("");
@@ -35,25 +34,20 @@ export default function TeacherLoginScreen() {
     setLoading(true);
     try {
       const loginId = phoneOrEmail.trim();
-      // Send email + identifier + phone: older APIs only read `email`; new API prefers `identifier`.
+      const identifier = loginId.includes("@") ? loginId.toLowerCase() : loginId;
       const { data } = await api.post("/auth/login", {
-        identifier: loginId,
-        email: loginId,
-        phone: loginId,
+        identifier,
+        email: identifier,
+        phone: identifier,
         password,
-        portal: "teacher",
+        portal: AUTH_PORTAL_CREW,
       });
       const { user, accessToken, refreshToken, mustChangePassword } = data;
-      if (user.role === "superadmin") {
-        setError("Master admin accounts use the web control center, not this app.");
+      if (!isCrewRole(user.role)) {
+        setError("This portal is for bus drivers and conductors only.");
         return;
       }
-      if (user.role !== TEACHER_APP_ROLE) {
-        setError("This app is for teachers only. Use the correct portal for your role.");
-        return;
-      }
-      // Store the mustChangePassword flag in auth store so we can
-      // show prompts inside the app, but always land on dashboard first.
+
       login(
         {
           _id: user._id,
@@ -67,7 +61,7 @@ export default function TeacherLoginScreen() {
         accessToken,
         refreshToken
       );
-      router.replace("/(teacher)/dashboard");
+      router.replace(STAFF_HOME_ROUTES.crew);
     } catch (err: any) {
       setError(err.response?.data?.message || "Invalid credentials");
     } finally {
@@ -98,9 +92,9 @@ export default function TeacherLoginScreen() {
             >
               <Text style={styles.backText}>← Back</Text>
             </TouchableOpacity>
-            <Text style={styles.title}>Teacher Portal</Text>
+            <Text style={styles.title}>Driver & Conductor</Text>
             <Text style={styles.subtitle}>
-              Teachers only — sign in with your registered mobile number or school email
+              Sign in with the mobile number from Staff login (same as teacher credentials). Email works if set.
             </Text>
             <TextInput
               style={styles.input}
@@ -185,7 +179,7 @@ const styles = StyleSheet.create({
   },
   errorText: { color: "#f87171", marginBottom: 8, fontSize: 14 },
   submit: {
-    backgroundColor: "#10B981",
+    backgroundColor: "#c2410c",
     padding: 16,
     borderRadius: 12,
     alignItems: "center",

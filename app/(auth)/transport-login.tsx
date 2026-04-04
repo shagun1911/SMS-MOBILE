@@ -18,23 +18,27 @@ import { useAuthStore } from "@/store/authStore";
 export default function TransportLoginScreen() {
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
-  const [email, setEmail] = useState("");
+  const [phoneOrEmail, setPhoneOrEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleSubmit = async () => {
-    if (!email.trim() || !password) {
+    if (!phoneOrEmail.trim() || !password) {
       setError("Please fill all fields");
       return;
     }
     setError("");
     setLoading(true);
     try {
+      const loginId = phoneOrEmail.trim();
+      const identifier = loginId.includes("@") ? loginId.toLowerCase() : loginId;
       const { data } = await api.post("/auth/login", {
-        email: email.trim().toLowerCase(),
+        identifier,
+        email: identifier,
+        phone: identifier,
         password,
-        portal: "teacher",
+        portal: "transport",
       });
       const { user, accessToken, refreshToken, mustChangePassword } = data;
       if (user.role !== "transport_manager") {
@@ -88,17 +92,17 @@ export default function TransportLoginScreen() {
             </TouchableOpacity>
             <Text style={styles.title}>Transport Manager Portal</Text>
             <Text style={styles.subtitle}>
-              Sign in with your transport manager email
+              Use the mobile number shown under Staff login (same as web teacher/staff credentials). Email still works if set.
             </Text>
             <TextInput
               style={styles.input}
-              placeholder="Email"
+              placeholder="Mobile number or email"
               placeholderTextColor="#94A3B8"
-              value={email}
-              onChangeText={setEmail}
+              value={phoneOrEmail}
+              onChangeText={setPhoneOrEmail}
               autoCapitalize="none"
-              keyboardType="email-address"
-              autoComplete="email"
+              keyboardType="default"
+              autoComplete="username"
             />
             <TextInput
               style={styles.input}

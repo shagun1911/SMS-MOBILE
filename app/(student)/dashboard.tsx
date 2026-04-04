@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -17,7 +17,9 @@ import studentApi from "@/lib/studentApi";
 import { RefreshableScrollView } from "@/components/RefreshableScrollView";
 import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
-const GLOBAL_NOTIF_SEEN_KEY = "sms_global_notif_seen_ids";
+function seenStorageKey(studentId: string) {
+  return `sms_student_notif_seen_${studentId}`;
+}
 
 function formatDate(d: string | Date) {
   if (!d) return "";
@@ -27,21 +29,28 @@ function formatAmount(n: number) {
   return `₹${Number(n).toLocaleString("en-IN")}`;
 }
 
+type NotifSource = "inbox" | "fee" | "homework" | "marks";
+
 // ── Notification type ─────────────────────────────────────────────────────────
-type Notif = {
+type NotifDraft = {
   id: string;
+  source: NotifSource;
+  /** Mongo _id for PATCH /student-notifications/:id/read */
+  inboxMongoId?: string;
   category: "fee" | "homework" | "marks" | "attendance" | "school";
   icon: string;
   title: string;
   subtitle: string;
-  date: string;         // ISO date string for sorting
+  date: string;
   accentColor: string;
   bgColor: string;
 };
 
+type Notif = NotifDraft & { read: boolean };
+
 // ── Build notifications from raw API data ─────────────────────────────────────
-function mapStudentInboxRows(raw: any[]): Notif[] {
-  const list: Notif[] = [];
+function mapStudentInboxRows(raw: any[]): NotifDraft[] {
+  const list: NotifDraft[] = [];
   for (const n of raw) {
     const id = String(n?._id ?? "");
     if (!id) continue;
@@ -49,6 +58,8 @@ function mapStudentInboxRows(raw: any[]): Notif[] {
     const isAbsent = t === "attendance_absent";
     list.push({
       id: `inbox-${id}`,
+      source: "inbox",
+      inboxMongoId: id,
       category: isAbsent ? "attendance" : "school",
       icon: isAbsent ? "📋" : "📣",
       title: String(n?.title ?? "Notification"),
@@ -61,10 +72,14 @@ function mapStudentInboxRows(raw: any[]): Notif[] {
   return list;
 }
 
-function buildNotifications(fees: any, homework: any[], results: any[], studentInbox: any[] = []): Notif[] {
-  const list: Notif[] = [];
+function buildNotifications(
+  fees: any,
+  homework: any[],
+  results: any[],
+  studentInbox: any[] = []
+): NotifDraft[] {
+  const list: NotifDraft[] = [];
 
-  // 1. Fee payment events from the StudentFee ledger sub-payments
   const ledgerEntries: any[] = fees?.payments ?? [];
   for (const entry of ledgerEntries) {
     const monthLabel =
@@ -75,6 +90,7 @@ function buildNotifications(fees: any, homework: any[], results: any[], studentI
       const id = String(p._id ?? `${entry._id}-${p.paymentDate}`);
       list.push({
         id: `fee-${id}`,
+        source: "fee",
         category: "fee",
         icon: "💰",
         title: `${monthLabel} fee deposited`,
@@ -86,10 +102,10 @@ function buildNotifications(fees: any, homework: any[], results: any[], studentI
     }
   }
 
-  // 2. Homework assignments
   for (const hw of homework) {
     list.push({
       id: `hw-${hw._id}`,
+      source: "homework",
       category: "homework",
       icon: "📚",
       title: `Homework assigned: ${hw.title ?? ""}`,
@@ -100,13 +116,13 @@ function buildNotifications(fees: any, homework: any[], results: any[], studentI
     });
   }
 
-  // 3. Exam results published
   for (const r of results) {
     const examName = r.examName ?? r.exam?.name ?? "Exam";
     const subject = r.subject ?? r.subjectName ?? "";
     const marks = r.marksObtained ?? r.marks ?? "";
     list.push({
       id: `result-${r._id}`,
+      source: "marks",
       category: "marks",
       icon: "📊",
       title: `Result published: ${examName}`,
@@ -119,7 +135,6 @@ function buildNotifications(fees: any, homework: any[], results: any[], studentI
 
   list.push(...mapStudentInboxRows(studentInbox));
 
-  // Sort most-recent first
   list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   return list;
 }
@@ -137,25 +152,37 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
 
-  // Notification panel state
   const [showNotifs, setShowNotifs] = useState(false);
-  const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
+  /** Local "read" state for fee / homework / marks rows (not stored on server). */
+  const [seenSyntheticIds, setSeenSyntheticIds] = useState<Set<string>>(new Set());
+  const optimisticInboxReadIdsRef = useRef<Set<string>>(new Set());
 
   const loadDashboard = useCallback(async () => {
+    const sid = student?._id;
+    const storageKey = sid ? seenStorageKey(sid) : null;
     try {
       const [fRes, hRes, rRes, nRes, storedRaw] = await Promise.all([
         studentApi.get("/fees/student/me"),
         studentApi.get("/homework/student"),
         studentApi.get("/exams/student/results"),
         studentApi.get("/student-notifications").catch(() => ({ data: { data: [] } })),
-        AsyncStorage.getItem(GLOBAL_NOTIF_SEEN_KEY),
+        storageKey ? AsyncStorage.getItem(storageKey) : Promise.resolve(null),
       ]);
       setFees(fRes.data.data);
       setHomework(hRes.data.data ?? []);
       setResults(rRes.data.data ?? []);
       const inboxRaw = nRes.data?.data ?? nRes.data ?? [];
       setStudentInbox(Array.isArray(inboxRaw) ? inboxRaw : []);
-      if (storedRaw) setSeenIds(new Set(JSON.parse(storedRaw)));
+      if (storedRaw) {
+        try {
+          const arr = JSON.parse(storedRaw) as string[];
+          setSeenSyntheticIds(new Set(Array.isArray(arr) ? arr : []));
+        } catch {
+          setSeenSyntheticIds(new Set());
+        }
+      } else {
+        setSeenSyntheticIds(new Set());
+      }
     } catch {
       // keep prior state on partial failure
     }
@@ -168,7 +195,7 @@ export default function StudentDashboard() {
         // keep previous logo
       }
     }
-  }, [student?.schoolCode]);
+  }, [student?.schoolCode, student?._id]);
 
   useEffect(() => {
     (async () => {
@@ -189,39 +216,98 @@ export default function StudentDashboard() {
   }, [loadDashboard]);
   useRegisterScreenRefresh(pullReload);
 
-  // ── Notification list ────────────────────────────────────────────
-  const notifications = useMemo(
+  useEffect(() => {
+    optimisticInboxReadIdsRef.current.clear();
+  }, [student?._id]);
+
+  const notificationDrafts = useMemo(
     () => buildNotifications(fees, homework, results, studentInbox),
     [fees, homework, results, studentInbox]
   );
 
+  const notifications: Notif[] = useMemo(() => {
+    return notificationDrafts.map((n) => {
+      if (n.source === "inbox" && n.inboxMongoId) {
+        const raw = studentInbox.find((x) => String(x._id) === n.inboxMongoId);
+        const serverRead = raw?.isRead === true || raw?.read === true;
+        if (serverRead) optimisticInboxReadIdsRef.current.delete(n.inboxMongoId);
+        const read =
+          serverRead || optimisticInboxReadIdsRef.current.has(n.inboxMongoId);
+        return { ...n, read };
+      }
+      return { ...n, read: seenSyntheticIds.has(n.id) };
+    });
+  }, [notificationDrafts, studentInbox, seenSyntheticIds]);
+
   const unreadCount = useMemo(
-    () => notifications.filter((n) => !seenIds.has(n.id)).length,
-    [notifications, seenIds]
+    () => notifications.filter((n) => !n.read).length,
+    [notifications]
   );
 
-  const markAllSeen = useCallback(async (ids: string[]) => {
-    const s = new Set(ids);
-    setSeenIds(s);
-    await AsyncStorage.setItem(GLOBAL_NOTIF_SEEN_KEY, JSON.stringify(ids));
-  }, []);
+  const unreadNotifications = useMemo(
+    () => notifications.filter((n) => !n.read),
+    [notifications]
+  );
 
-  const handleBellPress = () => {
-    setShowNotifs(true);
-    markAllSeen(notifications.map((n) => n.id));
-  };
+  const persistSeenSynthetic = useCallback(
+    async (next: Set<string>) => {
+      if (!student?._id) return;
+      await AsyncStorage.setItem(
+        seenStorageKey(student._id),
+        JSON.stringify([...next])
+      );
+    },
+    [student?._id]
+  );
+
+  const markOneRead = useCallback(
+    async (n: Notif) => {
+      if (n.read) return;
+      if (n.source === "inbox" && n.inboxMongoId) {
+        optimisticInboxReadIdsRef.current.add(n.inboxMongoId);
+        setStudentInbox((prev) =>
+          prev.map((row) =>
+            String(row._id) === n.inboxMongoId ? { ...row, isRead: true } : row
+          )
+        );
+        studentApi.patch(`/student-notifications/${n.inboxMongoId}/read`).catch(() => {});
+        return;
+      }
+      setSeenSyntheticIds((prev) => {
+        const next = new Set(prev);
+        next.add(n.id);
+        persistSeenSynthetic(next);
+        return next;
+      });
+    },
+    [persistSeenSynthetic]
+  );
+
+  const markAllRead = useCallback(async () => {
+    await studentApi.patch("/student-notifications/read-all").catch(() => {});
+    setStudentInbox((prev) => prev.map((x) => ({ ...x, isRead: true })));
+    setSeenSyntheticIds((prev) => {
+      const next = new Set(prev);
+      for (const d of notificationDrafts) {
+        if (d.source !== "inbox") next.add(d.id);
+      }
+      persistSeenSynthetic(next);
+      return next;
+    });
+  }, [notificationDrafts, persistSeenSynthetic]);
 
   // ── Derived stats ────────────────────────────────────────────────
   const pendingHw = homework.filter((h: any) => new Date(h.dueDate) >= new Date());
   const dueAmount = fees?.dueAmount ?? 0;
 
   const featureCards = [
-    { icon: "📚", title: "Homework",   route: "/(student)/homework",   accent: "#4f46e5", bg: "#eef2ff" },
-    { icon: "📊", title: "Marks",      route: "/(student)/marks",      accent: "#0891b2", bg: "#ecfeff" },
-    { icon: "💰", title: "Fees",       route: "/(student)/fees",       accent: "#16a34a", bg: "#f0fdf4" },
-    { icon: "📅", title: "Timetable",  route: "/(student)/timetable",  accent: "#d97706", bg: "#fffbeb" },
-    { icon: "👤", title: "Profile",    route: "/(student)/profile",    accent: "#7c3aed", bg: "#f5f3ff" },
-    { icon: "📋", title: "Attendance", route: "/(student)/attendance", accent: "#db2777", bg: "#fdf2f8" },
+    { icon: "📚", title: "Homework",     route: "/(student)/homework",      accent: "#4f46e5", bg: "#eef2ff" },
+    { icon: "📊", title: "Marks",        route: "/(student)/marks",         accent: "#0891b2", bg: "#ecfeff" },
+    { icon: "💰", title: "Fees",         route: "/(student)/fees",          accent: "#16a34a", bg: "#f0fdf4" },
+    { icon: "📅", title: "Timetable",    route: "/(student)/timetable",     accent: "#d97706", bg: "#fffbeb" },
+    { icon: "🚌", title: "Bus tracking", route: "/(student)/bus-tracking",  accent: "#0f766e", bg: "#ecfdf5" },
+    { icon: "📋", title: "Attendance",   route: "/(student)/attendance",    accent: "#db2777", bg: "#fdf2f8" },
+    { icon: "👤", title: "Profile",      route: "/(student)/profile",       accent: "#7c3aed", bg: "#f5f3ff" },
   ];
 
   const CATEGORY_LABELS: Record<Notif["category"], string> = {
@@ -260,7 +346,11 @@ export default function StudentDashboard() {
 
           <View style={styles.headerActions}>
             {/* Global notification bell */}
-            <TouchableOpacity style={styles.iconBtn} onPress={handleBellPress} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={styles.iconBtn}
+              onPress={() => setShowNotifs(true)}
+              activeOpacity={0.7}
+            >
               <Text style={styles.iconBtnEmoji}>🔔</Text>
               {unreadCount > 0 && (
                 <View style={styles.badge}>
@@ -291,16 +381,22 @@ export default function StudentDashboard() {
 
             {/* Sheet header */}
             <View style={styles.sheetHeader}>
-              <View>
+              <View style={{ flex: 1, paddingRight: 8 }}>
                 <Text style={styles.sheetTitle}>Notifications</Text>
                 <Text style={styles.sheetSub}>
-                  {notifications.length} total · fees, homework, results & attendance
+                  Unread only · fees, homework, results & school messages
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setShowNotifs(false)} style={styles.closeBtn}>
                 <Text style={styles.closeBtnText}>✕</Text>
               </TouchableOpacity>
             </View>
+
+            {unreadCount > 0 && (
+              <TouchableOpacity style={styles.markAllButton} onPress={markAllRead} activeOpacity={0.8}>
+                <Text style={styles.markAllText}>Mark all as read</Text>
+              </TouchableOpacity>
+            )}
 
             {notifications.length === 0 ? (
               <View style={styles.emptyBox}>
@@ -310,13 +406,23 @@ export default function StudentDashboard() {
                   Fee updates, homework, results, and absence alerts will appear here.
                 </Text>
               </View>
+            ) : unreadNotifications.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Text style={{ fontSize: 36, marginBottom: 10 }}>✓</Text>
+                <Text style={styles.emptyText}>You&apos;re all caught up</Text>
+                <Text style={styles.emptySub}>No unread notifications.</Text>
+              </View>
             ) : (
               <FlatList
-                data={notifications}
+                data={unreadNotifications}
                 keyExtractor={(item) => item.id}
                 showsVerticalScrollIndicator={false}
                 renderItem={({ item }) => (
-                  <View style={[styles.notifRow, { borderLeftColor: item.accentColor }]}>
+                  <TouchableOpacity
+                    style={[styles.notifRow, styles.notifRowUnread, { borderLeftColor: item.accentColor }]}
+                    activeOpacity={0.75}
+                    onPress={() => markOneRead(item)}
+                  >
                     <View style={[styles.notifIconWrap, { backgroundColor: item.bgColor }]}>
                       <Text style={styles.notifIcon}>{item.icon}</Text>
                     </View>
@@ -331,8 +437,9 @@ export default function StudentDashboard() {
                       </View>
                       <Text style={styles.notifTitle}>{item.title}</Text>
                       <Text style={styles.notifSub}>{item.subtitle}</Text>
+                      <Text style={styles.tapReadHint}>Tap to mark as read</Text>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 )}
                 ItemSeparatorComponent={() => <View style={styles.sep} />}
               />
@@ -473,6 +580,22 @@ const styles = StyleSheet.create({
   notifDate: { fontSize: 10, color: "#94a3b8" },
   notifTitle: { fontSize: 13, fontWeight: "600", color: "#0f172a" },
   notifSub: { fontSize: 11, color: "#64748b", marginTop: 2 },
+  notifRowUnread: { backgroundColor: "#eff6ff", borderRadius: 12 },
+  tapReadHint: {
+    marginTop: 6,
+    fontSize: 10,
+    color: "#1d4ed8",
+    fontWeight: "600",
+  },
+  markAllButton: {
+    alignSelf: "flex-end",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#e0f2fe",
+    marginBottom: 10,
+  },
+  markAllText: { fontSize: 11, color: "#0369a1", fontWeight: "600" },
   sep: { height: 1, backgroundColor: "#f1f5f9", marginHorizontal: 4 },
 
   /* Stats strip */

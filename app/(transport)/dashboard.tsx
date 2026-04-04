@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   Pressable,
   TextInput,
   Alert,
+  Platform,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuthStore } from "@/store/authStore";
@@ -21,12 +23,31 @@ import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 type CrewMember = { _id: string; name: string; phone?: string };
 
+type UserNotifItem = {
+  id: string;
+  title: string;
+  message: string;
+  createdAt: string;
+  type: string;
+  read: boolean;
+};
+
 export default function TransportDashboard() {
   const router = useRouter();
   const { user, logout } = useAuthStore();
+  const { height: windowHeight } = useWindowDimensions();
+  const notifListMaxHeight = Math.min(460, Math.max(220, windowHeight * 0.52));
+
   const [fleet, setFleet] = useState<any[]>([]);
+  const [salaryRecords, setSalaryRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const optimisticReadIdsRef = useRef<Set<string>>(new Set());
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [notifError, setNotifError] = useState<string | null>(null);
+  const [notifItems, setNotifItems] = useState<UserNotifItem[]>([]);
 
   const [selectedBusId, setSelectedBusId] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -59,30 +80,108 @@ export default function TransportDashboard() {
   const [assigning, setAssigning] = useState(false);
   const [unassigningId, setUnassigningId] = useState<string | null>(null);
 
-  const fetchFleet = useCallback(async () => {
+  // Add school bus (transport manager)
+  const [addBusOpen, setAddBusOpen] = useState(false);
+  const [addBusSaving, setAddBusSaving] = useState(false);
+  const [newBusNumber, setNewBusNumber] = useState("");
+  const [newRegistration, setNewRegistration] = useState("");
+  const [newRoute, setNewRoute] = useState("");
+  const [newCapacity, setNewCapacity] = useState("");
+  const [newDriverStaffId, setNewDriverStaffId] = useState("");
+  const [newDriverName, setNewDriverName] = useState("");
+  const [newDriverPhone, setNewDriverPhone] = useState("");
+  const [newConductorStaffId, setNewConductorStaffId] = useState("");
+  const [newConductorName, setNewConductorName] = useState("");
+  const [newConductorPhone, setNewConductorPhone] = useState("");
+  const [addBusCrewDrivers, setAddBusCrewDrivers] = useState<CrewMember[]>([]);
+  const [addBusCrewConductors, setAddBusCrewConductors] = useState<CrewMember[]>([]);
+  const [addBusStudents, setAddBusStudents] = useState<any[]>([]);
+  const [addBusStudentSearch, setAddBusStudentSearch] = useState("");
+  const [addBusSelectedStudents, setAddBusSelectedStudents] = useState<Record<string, boolean>>({});
+  const [showAddDriverPicker, setShowAddDriverPicker] = useState(false);
+  const [showAddConductorPicker, setShowAddConductorPicker] = useState(false);
+
+  const normalizeNotifications = useCallback((list: any[]): UserNotifItem[] => {
+    const out: UserNotifItem[] = [];
+    for (const n of list) {
+      const id = String(n._id ?? n.id ?? "");
+      if (!id) continue;
+      const serverRead = n.isRead === true || n.read === true;
+      if (serverRead) optimisticReadIdsRef.current.delete(id);
+      const read = serverRead || optimisticReadIdsRef.current.has(id);
+      out.push({
+        id,
+        title: String(n.title ?? "Notification"),
+        message: String(n.message ?? ""),
+        createdAt: String(n.createdAt ?? new Date().toISOString()),
+        type: String(n.type ?? "general"),
+        read,
+      });
+    }
+    return out;
+  }, []);
+
+  const loadHome = useCallback(async () => {
     const res = await api.get("/transport");
     const list = res.data?.data ?? res.data ?? [];
     setFleet(Array.isArray(list) ? list : []);
-  }, []);
+
+    try {
+      const salRes = await api.get("/salaries/my/history");
+      const sd = salRes.data?.data ?? salRes.data ?? [];
+      setSalaryRecords(Array.isArray(sd) ? sd : []);
+    } catch {
+      setSalaryRecords([]);
+    }
+
+    try {
+      setNotifLoading(true);
+      setNotifError(null);
+      const nRes = await api.get("/user-notifications");
+      const nd = nRes.data?.data ?? nRes.data ?? [];
+      setNotifItems(normalizeNotifications(Array.isArray(nd) ? nd : []).slice(0, 50));
+    } catch (e: any) {
+      setNotifError(e?.response?.data?.message ?? "Unable to load notifications.");
+    } finally {
+      setNotifLoading(false);
+    }
+  }, [normalizeNotifications]);
+
+  useEffect(() => {
+    optimisticReadIdsRef.current.clear();
+  }, [user?._id]);
+
+  const unreadNotifCount = useMemo(
+    () => notifItems.filter((n) => !n.read).length,
+    [notifItems]
+  );
+  const unreadNotifItems = useMemo(
+    () => notifItems.filter((n) => !n.read),
+    [notifItems]
+  );
+
+  const latestSalary = salaryRecords[0] ?? null;
+  const fmtInr = (n: number) =>
+    `₹${Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 
   useEffect(() => {
     (async () => {
       try {
         setLoading(true);
         setError(null);
-        await fetchFleet();
+        await loadHome();
       } catch (e: any) {
         setError(e?.response?.data?.message ?? "Unable to load buses.");
       } finally {
         setLoading(false);
       }
     })();
-  }, [fetchFleet]);
+  }, [loadHome]);
 
   const pullReload = useCallback(async () => {
     try {
       setError(null);
-      await fetchFleet();
+      await loadHome();
     } catch (e: any) {
       setError(e?.response?.data?.message ?? "Unable to load buses.");
     }
@@ -116,7 +215,7 @@ export default function TransportDashboard() {
         // keep prior details
       }
     }
-  }, [fetchFleet, selectedBusId, crewDrivers, crewConductors]);
+  }, [loadHome, selectedBusId, crewDrivers, crewConductors]);
   useRegisterScreenRefresh(pullReload);
 
   const mapCrew = (list: any[]): CrewMember[] =>
@@ -257,7 +356,7 @@ export default function TransportDashboard() {
       });
       await refreshDetails();
       try {
-        await fetchFleet();
+        await loadHome();
       } catch {
         // grid may be stale until next open
       }
@@ -281,11 +380,26 @@ export default function TransportDashboard() {
     if (ids.length === 0) return;
     try {
       setAssigning(true);
+      // Backend sets busId in one shot (moves off any previous bus).
       await api.post(`/transport/${selectedBusId}/students`, { studentIds: ids });
       setSelectedStudentIds({});
       await refreshDetails();
-    } catch {
-      // ignore basic error handling for now
+      try {
+        const res = await api.get("/students", { params: { limit: 200 } });
+        const list = res.data?.data ?? res.data ?? [];
+        setAllStudents(Array.isArray(list) ? list : []);
+      } catch {
+        /* list may be stale until next open */
+      }
+      try {
+        await loadHome();
+      } catch {
+        /* fleet cards optional */
+      }
+    } catch (e: any) {
+      const msg =
+        e?.response?.data?.message ?? e?.message ?? "Could not assign students.";
+      Alert.alert("Assign failed", String(msg));
     } finally {
       setAssigning(false);
     }
@@ -305,6 +419,117 @@ export default function TransportDashboard() {
       setUnassigningId(null);
     }
   };
+
+  const filteredAddBusStudents = useMemo(() => {
+    const list: any[] = Array.isArray(addBusStudents) ? addBusStudents : [];
+    const q = addBusStudentSearch.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((s: any) => {
+      const full = `${s.firstName ?? ""} ${s.lastName ?? ""}`.trim().toLowerCase();
+      return (
+        full.includes(q) ||
+        String(s.admissionNumber ?? "").toLowerCase().includes(q) ||
+        String(s.phone ?? "").toLowerCase().includes(q) ||
+        String(s.username ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [addBusStudents, addBusStudentSearch]);
+
+  const openAddBusModal = useCallback(async () => {
+    setNewBusNumber("");
+    setNewRegistration("");
+    setNewRoute("");
+    setNewCapacity("");
+    setNewDriverStaffId("");
+    setNewDriverName("");
+    setNewDriverPhone("");
+    setNewConductorStaffId("");
+    setNewConductorName("");
+    setNewConductorPhone("");
+    setAddBusStudentSearch("");
+    setAddBusSelectedStudents({});
+    setShowAddDriverPicker(false);
+    setShowAddConductorPicker(false);
+    setAddBusOpen(true);
+    try {
+      const [crewRes, stuRes] = await Promise.all([
+        api.get("/transport/crew-options"),
+        api.get("/students", { params: { limit: 400 } }),
+      ]);
+      const crew = crewRes.data?.data ?? crewRes.data;
+      setAddBusCrewDrivers(mapCrew(crew?.drivers ?? []));
+      setAddBusCrewConductors(mapCrew(crew?.conductors ?? []));
+      const sl = stuRes.data?.data ?? stuRes.data ?? [];
+      setAddBusStudents(Array.isArray(sl) ? sl : []);
+    } catch {
+      setAddBusCrewDrivers([]);
+      setAddBusCrewConductors([]);
+      setAddBusStudents([]);
+    }
+  }, []);
+
+  const submitAddBus = useCallback(async () => {
+    const bn = newBusNumber.trim();
+    const reg = newRegistration.trim();
+    const route = newRoute.trim();
+    const cap = Number(String(newCapacity).replace(/[^\d]/g, "")) || 0;
+    if (!bn || !reg || !route || cap < 1) {
+      Alert.alert(
+        "Missing information",
+        "Enter bus number, registration, route name, and capacity (at least 1)."
+      );
+      return;
+    }
+    setAddBusSaving(true);
+    try {
+      const payload: Record<string, unknown> = {
+        busNumber: bn,
+        registrationNumber: reg,
+        routeName: route,
+        capacity: cap,
+        isActive: true,
+        driverName: newDriverName.trim(),
+        driverPhone: newDriverPhone.trim(),
+        conductorName: newConductorName.trim(),
+        conductorPhone: newConductorPhone.trim(),
+      };
+      if (newDriverStaffId) payload.driverUserId = newDriverStaffId;
+      if (newConductorStaffId) payload.conductorUserId = newConductorStaffId;
+      const res = await api.post("/transport", payload);
+      const created = res.data?.data ?? res.data;
+      const busId = created?._id != null ? String(created._id) : "";
+      const stuIds = Object.entries(addBusSelectedStudents)
+        .filter(([, v]) => v)
+        .map(([k]) => k);
+      if (busId && stuIds.length > 0) {
+        await api.post(`/transport/${busId}/students`, { studentIds: stuIds });
+      }
+      setAddBusOpen(false);
+      await loadHome();
+      Alert.alert(
+        "Bus added",
+        stuIds.length ? `${stuIds.length} student(s) assigned to this bus.` : "Vehicle created successfully."
+      );
+    } catch (e: any) {
+      const msg = e?.response?.data?.message ?? e?.message ?? "Try again.";
+      Alert.alert("Could not add bus", String(msg));
+    } finally {
+      setAddBusSaving(false);
+    }
+  }, [
+    newBusNumber,
+    newRegistration,
+    newRoute,
+    newCapacity,
+    newDriverName,
+    newDriverPhone,
+    newConductorName,
+    newConductorPhone,
+    newDriverStaffId,
+    newConductorStaffId,
+    addBusSelectedStudents,
+    loadHome,
+  ]);
 
   return (
     <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -329,19 +554,167 @@ export default function TransportDashboard() {
               </Text>
             </View>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.logoutBtn}
-            onPress={() => {
-              logout();
-            }}
-          >
-            <Text style={styles.logoutText}>Logout</Text>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => setNotifOpen(true)}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.iconButtonEmoji}>🔔</Text>
+              {unreadNotifCount > 0 && (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>
+                    {Math.min(9, unreadNotifCount)}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.logoutBtn}
+              onPress={() => {
+                logout();
+                router.replace("/");
+              }}
+            >
+              <Text style={styles.logoutText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
 
+      <Modal
+        visible={notifOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setNotifOpen(false)}
+      >
+        <Pressable style={styles.notifBackdrop} onPress={() => setNotifOpen(false)}>
+          <Pressable style={styles.notifModalCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.notifModalTitle}>Notifications</Text>
+            <Text style={styles.notifModalSub}>Unread messages only.</Text>
+
+            {unreadNotifCount > 0 && (
+              <TouchableOpacity
+                style={styles.notifMarkAll}
+                onPress={() => {
+                  setNotifItems((items) => {
+                    for (const n of items) {
+                      if (!n.read) optimisticReadIdsRef.current.add(n.id);
+                    }
+                    return items.map((n) => ({ ...n, read: true }));
+                  });
+                  api.patch("/user-notifications/read-all").catch(() => {});
+                }}
+              >
+                <Text style={styles.notifMarkAllText}>Mark all as read</Text>
+              </TouchableOpacity>
+            )}
+
+            {notifLoading ? (
+              <View style={styles.notifCenter}>
+                <ActivityIndicator size="small" color="#0f766e" />
+                <Text style={styles.notifCenterText}>Loading…</Text>
+              </View>
+            ) : notifError ? (
+              <View style={styles.notifCenter}>
+                <Text style={styles.notifErrText}>{notifError}</Text>
+              </View>
+            ) : !notifItems.length ? (
+              <View style={styles.notifCenter}>
+                <Text style={styles.notifEmpty}>No notifications yet.</Text>
+              </View>
+            ) : unreadNotifItems.length === 0 ? (
+              <View style={styles.notifCenter}>
+                <Text style={styles.notifEmpty}>You&apos;re all caught up.</Text>
+                <Text style={styles.notifEmptySub}>No unread notifications.</Text>
+              </View>
+            ) : (
+              <ScrollView
+                style={[styles.notifScroll, { maxHeight: notifListMaxHeight }]}
+                contentContainerStyle={styles.notifScrollContent}
+                showsVerticalScrollIndicator
+                nestedScrollEnabled
+                keyboardShouldPersistTaps="handled"
+                persistentScrollbar={Platform.OS === "android"}
+                indicatorStyle={Platform.OS === "ios" ? "black" : undefined}
+              >
+                {unreadNotifItems.map((n) => {
+                  const dt = new Date(n.createdAt);
+                  const dateStr = dt.toLocaleDateString("en-IN", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  });
+                  const timeStr = dt.toLocaleTimeString("en-IN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  });
+                  return (
+                    <TouchableOpacity
+                      key={n.id}
+                      style={[styles.notifRowItem, styles.notifRowUnread]}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        optimisticReadIdsRef.current.add(n.id);
+                        setNotifItems((items) =>
+                          items.map((it) => (it.id === n.id ? { ...it, read: true } : it))
+                        );
+                        api.patch(`/user-notifications/${n.id}/read`).catch(() => {});
+                      }}
+                    >
+                      <Text style={[styles.notifItemTitle, styles.notifItemTitleUnread]}>
+                        {n.title}
+                      </Text>
+                      {!!n.message && <Text style={styles.notifItemBody}>{n.message}</Text>}
+                      <Text style={styles.notifItemMeta}>
+                        {dateStr} · {timeStr}
+                      </Text>
+                      <Text style={styles.notifTapHint}>Tap to mark as read</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <TouchableOpacity
+        style={styles.salaryCard}
+        activeOpacity={0.8}
+        onPress={() => router.push("/(transport)/salary")}
+      >
+        <Text style={styles.salaryEmoji}>💵</Text>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.salaryCardTitle}>Salary</Text>
+          {latestSalary ? (
+            <>
+              <Text style={styles.salaryCardMonth}>
+                {latestSalary.month} {latestSalary.year}
+              </Text>
+              <Text style={styles.salaryCardLine}>
+                Paid {fmtInr(latestSalary.paidAmount ?? 0)} of {fmtInr(latestSalary.netSalary ?? 0)}
+                {latestSalary.status === "paid"
+                  ? " · Paid"
+                  : latestSalary.status === "partial"
+                    ? " · Partial"
+                    : " · Pending"}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.salaryCardHint}>View disbursements & payment history</Text>
+          )}
+        </View>
+        <Text style={styles.salaryChevron}>›</Text>
+      </TouchableOpacity>
+
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Buses</Text>
+        <View style={styles.sectionTitleRow}>
+          <Text style={styles.sectionTitle}>Buses</Text>
+          <TouchableOpacity style={styles.addBusBtn} onPress={openAddBusModal} activeOpacity={0.85}>
+            <Text style={styles.addBusBtnText}>+ Add bus</Text>
+          </TouchableOpacity>
+        </View>
         {loading ? (
           <View style={styles.center}>
             <ActivityIndicator size="large" color="#4f46e5" />
@@ -369,6 +742,160 @@ export default function TransportDashboard() {
           </View>
         )}
       </View>
+
+      <Modal
+        visible={addBusOpen}
+        animationType="slide"
+        onRequestClose={() => !addBusSaving && setAddBusOpen(false)}
+      >
+        <SafeAreaView style={styles.addBusSafe} edges={["top"]}>
+          <View style={styles.addBusHeader}>
+            <Text style={styles.addBusTitle}>Add school bus</Text>
+            <TouchableOpacity
+              onPress={() => !addBusSaving && setAddBusOpen(false)}
+              hitSlop={12}
+              disabled={addBusSaving}
+            >
+              <Text style={styles.addBusClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            style={styles.addBusScroll}
+            contentContainerStyle={styles.addBusScrollContent}
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled
+          >
+            <Text style={styles.addBusLabel}>Bus number *</Text>
+            <TextInput
+              style={styles.addBusInput}
+              value={newBusNumber}
+              onChangeText={setNewBusNumber}
+              placeholder="e.g. MH-01-AB-1234"
+              placeholderTextColor="#94a3b8"
+              autoCapitalize="characters"
+              editable={!addBusSaving}
+            />
+            <Text style={styles.addBusLabel}>Registration number *</Text>
+            <TextInput
+              style={styles.addBusInput}
+              value={newRegistration}
+              onChangeText={setNewRegistration}
+              placeholder="Registration"
+              placeholderTextColor="#94a3b8"
+              autoCapitalize="characters"
+              editable={!addBusSaving}
+            />
+            <Text style={styles.addBusLabel}>Route name *</Text>
+            <TextInput
+              style={styles.addBusInput}
+              value={newRoute}
+              onChangeText={setNewRoute}
+              placeholder="Route / destination"
+              placeholderTextColor="#94a3b8"
+              editable={!addBusSaving}
+            />
+            <Text style={styles.addBusLabel}>Capacity (seats) *</Text>
+            <TextInput
+              style={styles.addBusInput}
+              value={newCapacity}
+              onChangeText={setNewCapacity}
+              placeholder="e.g. 40"
+              placeholderTextColor="#94a3b8"
+              keyboardType="number-pad"
+              editable={!addBusSaving}
+            />
+
+            <Text style={styles.addBusSection}>Driver</Text>
+            <TouchableOpacity
+              style={styles.addBusPickerRow}
+              onPress={() => setShowAddDriverPicker(true)}
+              disabled={addBusSaving}
+            >
+              <Text style={styles.addBusPickerText}>
+                {newDriverName ? `${newDriverName}${newDriverPhone ? ` · ${newDriverPhone}` : ""}` : "Select driver (optional)"}
+              </Text>
+              <Text style={styles.addBusChevron}>▼</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.addBusSection}>Conductor</Text>
+            <TouchableOpacity
+              style={styles.addBusPickerRow}
+              onPress={() => setShowAddConductorPicker(true)}
+              disabled={addBusSaving}
+            >
+              <Text style={styles.addBusPickerText}>
+                {newConductorName
+                  ? `${newConductorName}${newConductorPhone ? ` · ${newConductorPhone}` : ""}`
+                  : "Select conductor (optional)"}
+              </Text>
+              <Text style={styles.addBusChevron}>▼</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.addBusSection}>Assign students</Text>
+            <Text style={styles.addBusHint}>
+              Optional. Students already on another bus can be selected; they are moved to this bus when created. Use search to filter.
+            </Text>
+            <TextInput
+              style={styles.addBusInput}
+              value={addBusStudentSearch}
+              onChangeText={setAddBusStudentSearch}
+              placeholder="Search name, admission no., phone…"
+              placeholderTextColor="#94a3b8"
+              editable={!addBusSaving}
+            />
+            <ScrollView
+              style={styles.addBusStudentList}
+              contentContainerStyle={styles.addBusStudentListContent}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+              bounces={false}
+            >
+              {filteredAddBusStudents.slice(0, 200).map((s: any) => {
+                const sid = String(s._id);
+                const onOther = !!s.busId;
+                return (
+                  <TouchableOpacity
+                    key={sid}
+                    style={[styles.addBusStudentRow, onOther && styles.addBusStudentRowMuted]}
+                    activeOpacity={0.75}
+                    onPress={() => {
+                      if (addBusSaving) return;
+                      setAddBusSelectedStudents((prev) => ({ ...prev, [sid]: !prev[sid] }));
+                    }}
+                  >
+                    <View style={styles.checkbox}>
+                      {addBusSelectedStudents[sid] ? <View style={styles.checkboxInner} /> : null}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.addBusStudentName}>
+                        {`${s.firstName ?? ""} ${s.lastName ?? ""}`.trim() || "—"}
+                      </Text>
+                      <Text style={styles.addBusStudentMeta}>
+                        Class {s.class ?? "—"}
+                        {s.section ? ` · ${s.section}` : ""} · Adm {s.admissionNumber ?? "—"}
+                        {onOther ? " · already on a bus" : ""}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.addBusSubmit, addBusSaving && styles.addBusSubmitDisabled]}
+              onPress={submitAddBus}
+              disabled={addBusSaving}
+            >
+              {addBusSaving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.addBusSubmitText}>Create bus</Text>
+              )}
+            </TouchableOpacity>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
 
       <Modal
         visible={detailsOpen}
@@ -654,6 +1181,9 @@ export default function TransportDashboard() {
                 <Text style={[styles.sectionTitle, { marginTop: 20 }]}>
                   Assign students to this bus
                 </Text>
+                <Text style={styles.crewHint}>
+                  Students on another bus can be selected; they are moved here when you tap Assign selected.
+                </Text>
                 <TextInput
                   style={styles.input}
                   placeholder="Search by name / admission / phone / username"
@@ -682,27 +1212,29 @@ export default function TransportDashboard() {
                     // Hide students already on THIS bus
                     .filter((s: any) => !students.some((x) => x._id === s._id))
                     .map((s: any) => {
-                      const onOtherBus = !!s.busId && s.busId !== selectedBusId;
+                      const sid = String(s._id);
+                      const prevBusId = s.busId != null ? String(s.busId) : "";
+                      const onOtherBus =
+                        !!prevBusId && prevBusId !== String(selectedBusId ?? "");
                       const currentBus =
-                        onOtherBus && fleet.find((b: any) => b._id === s.busId);
+                        onOtherBus && fleet.find((b: any) => String(b._id) === prevBusId);
 
                       return (
                         <TouchableOpacity
-                          key={s._id}
+                          key={sid}
                           style={styles.assignRow}
                           activeOpacity={0.8}
                           onPress={() => {
-                            if (onOtherBus) return; // must remove from old bus first
                             setSelectedStudentIds((prev) => ({
                               ...prev,
-                              [s._id]: !prev[s._id],
+                              [sid]: !prev[sid],
                             }));
                           }}
                         >
                           <View style={styles.checkbox}>
-                            {selectedStudentIds[s._id] && !onOtherBus && (
+                            {selectedStudentIds[sid] ? (
                               <View style={styles.checkboxInner} />
-                            )}
+                            ) : null}
                           </View>
                           <View style={{ flex: 1 }}>
                             <Text style={styles.studentName}>
@@ -831,6 +1363,92 @@ export default function TransportDashboard() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal
+        visible={showAddDriverPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAddDriverPicker(false)}
+      >
+        <Pressable style={styles.pickerBackdrop} onPress={() => setShowAddDriverPicker(false)}>
+          <Pressable style={styles.pickerSheet} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.pickerTitle}>Choose driver</Text>
+            <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
+              <TouchableOpacity
+                style={styles.pickerRow}
+                onPress={() => {
+                  setNewDriverStaffId("");
+                  setNewDriverName("");
+                  setNewDriverPhone("");
+                  setShowAddDriverPicker(false);
+                }}
+              >
+                <Text style={styles.pickerRowMuted}>None (clear)</Text>
+              </TouchableOpacity>
+              {addBusCrewDrivers.map((m) => (
+                <TouchableOpacity
+                  key={m._id}
+                  style={styles.pickerRow}
+                  onPress={() => {
+                    setNewDriverStaffId(m._id);
+                    setNewDriverName(m.name);
+                    setNewDriverPhone(m.phone ?? "");
+                    setShowAddDriverPicker(false);
+                  }}
+                >
+                  <Text style={styles.pickerRowText}>
+                    {m.name}
+                    {m.phone ? ` · ${m.phone}` : ""}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={showAddConductorPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAddConductorPicker(false)}
+      >
+        <Pressable style={styles.pickerBackdrop} onPress={() => setShowAddConductorPicker(false)}>
+          <Pressable style={styles.pickerSheet} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.pickerTitle}>Choose conductor</Text>
+            <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
+              <TouchableOpacity
+                style={styles.pickerRow}
+                onPress={() => {
+                  setNewConductorStaffId("");
+                  setNewConductorName("");
+                  setNewConductorPhone("");
+                  setShowAddConductorPicker(false);
+                }}
+              >
+                <Text style={styles.pickerRowMuted}>None (clear)</Text>
+              </TouchableOpacity>
+              {addBusCrewConductors.map((m) => (
+                <TouchableOpacity
+                  key={m._id}
+                  style={styles.pickerRow}
+                  onPress={() => {
+                    setNewConductorStaffId(m._id);
+                    setNewConductorName(m.name);
+                    setNewConductorPhone(m.phone ?? "");
+                    setShowAddConductorPicker(false);
+                  }}
+                >
+                  <Text style={styles.pickerRowText}>
+                    {m.name}
+                    {m.phone ? ` · ${m.phone}` : ""}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </RefreshableScrollView>
   );
 }
@@ -856,12 +1474,91 @@ const styles = StyleSheet.create({
   profilePill: {
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
+    minWidth: 0,
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 999,
     backgroundColor: "#e0f2fe",
-    maxWidth: "70%",
+    marginRight: 8,
   },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 6 },
+  iconButton: { padding: 6, position: "relative" },
+  iconButtonEmoji: { fontSize: 20 },
+  notifBadge: {
+    position: "absolute",
+    top: 1,
+    right: 1,
+    backgroundColor: "#ef4444",
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: "#fff",
+  },
+  notifBadgeText: { fontSize: 9, fontWeight: "800", color: "#fff" },
+  notifBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    padding: 20,
+  },
+  notifModalCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 18,
+    maxHeight: "80%",
+  },
+  notifModalTitle: { fontSize: 18, fontWeight: "700", color: "#0f172a" },
+  notifModalSub: { fontSize: 12, color: "#64748b", marginTop: 4, marginBottom: 4 },
+  notifMarkAll: {
+    alignSelf: "flex-end",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#ccfbf1",
+    marginBottom: 8,
+  },
+  notifMarkAllText: { fontSize: 11, color: "#0f766e", fontWeight: "600" },
+  notifCenter: { paddingVertical: 20, alignItems: "center" },
+  notifCenterText: { marginTop: 8, fontSize: 13, color: "#64748b" },
+  notifErrText: { fontSize: 12, color: "#b91c1c", textAlign: "center" },
+  notifEmpty: { fontSize: 13, color: "#475569", fontWeight: "600", textAlign: "center" },
+  notifEmptySub: { fontSize: 12, color: "#94a3b8", marginTop: 6, textAlign: "center" },
+  notifScroll: { marginTop: 4 },
+  notifScrollContent: { paddingBottom: 8 },
+  notifRowItem: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+  },
+  notifRowUnread: { backgroundColor: "#f0fdfa", borderRadius: 10, paddingHorizontal: 10, marginBottom: 8 },
+  notifItemTitle: { fontSize: 13, color: "#0f172a" },
+  notifItemTitleUnread: { fontWeight: "600" },
+  notifItemBody: { fontSize: 12, color: "#334155", marginTop: 4 },
+  notifItemMeta: { fontSize: 11, color: "#6b7280", marginTop: 4 },
+  notifTapHint: { marginTop: 4, fontSize: 10, color: "#0f766e", fontWeight: "600" },
+  salaryCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 16,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#99f6e4",
+    gap: 12,
+  },
+  salaryEmoji: { fontSize: 28 },
+  salaryCardTitle: { fontSize: 16, fontWeight: "700", color: "#0f172a" },
+  salaryCardMonth: { fontSize: 13, color: "#64748b", marginTop: 2 },
+  salaryCardLine: { fontSize: 13, fontWeight: "600", color: "#0f766e", marginTop: 4 },
+  salaryCardHint: { fontSize: 13, color: "#64748b", marginTop: 4 },
+  salaryChevron: { fontSize: 22, color: "#94a3b8", fontWeight: "300" },
   avatar: {
     width: 32,
     height: 32,
@@ -883,6 +1580,100 @@ const styles = StyleSheet.create({
   logoutText: { color: "#b91c1c", fontWeight: "600", fontSize: 13 },
   section: { paddingHorizontal: 16, paddingTop: 16 },
   sectionTitle: { fontSize: 16, fontWeight: "600", color: "#0f172a", marginBottom: 8 },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  addBusBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: "#4f46e5",
+  },
+  addBusBtnText: { color: "#fff", fontWeight: "700", fontSize: 13 },
+  addBusSafe: { flex: 1, backgroundColor: "#fff" },
+  addBusHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  addBusTitle: { fontSize: 18, fontWeight: "700", color: "#0f172a" },
+  addBusClose: { fontSize: 22, color: "#64748b", padding: 4 },
+  addBusScroll: { flex: 1 },
+  addBusScrollContent: { padding: 16, paddingBottom: 32 },
+  addBusLabel: { fontSize: 12, fontWeight: "600", color: "#64748b", marginBottom: 6 },
+  addBusInput: {
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: "#0f172a",
+    marginBottom: 14,
+    backgroundColor: "#f8fafc",
+  },
+  addBusSection: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  addBusPickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginBottom: 14,
+    backgroundColor: "#f8fafc",
+  },
+  addBusPickerText: { fontSize: 14, color: "#0f172a", flex: 1 },
+  addBusChevron: { fontSize: 10, color: "#94a3b8", marginLeft: 8 },
+  addBusHint: { fontSize: 12, color: "#64748b", marginBottom: 8 },
+  /** Fixed height so nested ScrollView gets a bounded viewport (scrolls inside the list). */
+  addBusStudentList: {
+    height: 240,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 10,
+    marginBottom: 16,
+    backgroundColor: "#fff",
+  },
+  addBusStudentListContent: {
+    flexGrow: 1,
+    paddingBottom: 4,
+  },
+  addBusStudentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  addBusStudentRowMuted: { opacity: 0.45 },
+  addBusStudentName: { fontSize: 14, fontWeight: "600", color: "#0f172a" },
+  addBusStudentMeta: { fontSize: 12, color: "#64748b", marginTop: 2 },
+  addBusSubmit: {
+    marginTop: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: "#4f46e5",
+    alignItems: "center",
+  },
+  addBusSubmitDisabled: { opacity: 0.55 },
+  addBusSubmitText: { color: "#fff", fontWeight: "700", fontSize: 16 },
   center: { paddingVertical: 24, alignItems: "center", justifyContent: "center" },
   error: { color: "#b91c1c", fontSize: 14 },
   empty: { color: "#6b7280", fontSize: 14, paddingVertical: 8 },

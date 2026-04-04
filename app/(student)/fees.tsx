@@ -8,6 +8,7 @@ import {
   Modal,
   FlatList,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import studentApi from "@/lib/studentApi";
 import { RefreshableScrollView } from "@/components/RefreshableScrollView";
@@ -200,14 +201,17 @@ export default function StudentFeesScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4f46e5" />
-      </View>
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#4f46e5" />
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* ── Title row with notification bell ── */}
       <View style={styles.titleRow}>
         <View>
@@ -473,11 +477,13 @@ export default function StudentFeesScreen() {
           <Text style={styles.alertText}>Bring your admission number when visiting the fee department.</Text>
         </View>
       )}
-    </RefreshableScrollView>
+      </RefreshableScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: "#f8fafc" },
   container: { flex: 1, backgroundColor: "#f8fafc" },
   content: { padding: 16, paddingBottom: 40 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },

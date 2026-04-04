@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Linking,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import studentApi from "@/lib/studentApi";
 import { RefreshableScrollView } from "@/components/RefreshableScrollView";
 import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
@@ -44,9 +45,11 @@ export default function StudentHomeworkScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4f46e5" />
-      </View>
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#4f46e5" />
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -90,7 +93,8 @@ export default function StudentHomeworkScreen() {
   };
 
   return (
-    <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Homework</Text>
       <Text style={styles.subtitle}>All assignments for your class</Text>
 
@@ -113,11 +117,13 @@ export default function StudentHomeworkScreen() {
       {homework.length === 0 && (
         <Text style={styles.empty}>No homework assigned yet.</Text>
       )}
-    </RefreshableScrollView>
+      </RefreshableScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: "#f8fafc" },
   container: { flex: 1, backgroundColor: "#f8fafc" },
   content: { padding: 16, paddingBottom: 32 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },

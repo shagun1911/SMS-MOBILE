@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useStudentAuthStore } from "@/store/studentAuthStore";
 import studentApi from "@/lib/studentApi";
 import { RefreshableScrollView } from "@/components/RefreshableScrollView";
@@ -26,21 +27,18 @@ export default function StudentTimetableScreen() {
   const [timetable, setTimetable] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  /** Server uses the student JWT and DB class/section — staff /timetable route does not accept student tokens. */
   const loadTimetable = useCallback(async () => {
-    if (!student?.class || !student?.section) {
+    if (!student?._id) {
       setTimetable([]);
       return;
     }
-    const params = new URLSearchParams({
-      className: String(student.class),
-      section: String(student.section),
-    });
-    const res = await studentApi.get(`/timetable?${params.toString()}`);
+    const res = await studentApi.get("/auth/student/timetable");
     setTimetable(res.data.data ?? []);
-  }, [student?.class, student?.section]);
+  }, [student?._id]);
 
   useEffect(() => {
-    if (!student?.class || !student?.section) {
+    if (!student?._id) {
       setLoading(false);
       return;
     }
@@ -53,7 +51,7 @@ export default function StudentTimetableScreen() {
         setLoading(false);
       }
     })();
-  }, [loadTimetable, student?.class, student?.section]);
+  }, [loadTimetable, student?._id]);
 
   const pullReload = useCallback(async () => {
     try {
@@ -69,20 +67,27 @@ export default function StudentTimetableScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4f46e5" />
-      </View>
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#4f46e5" />
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Timetable</Text>
       <Text style={styles.subtitle}>
-        Class {student?.class} — Section {student?.section}
+        {student?.class
+          ? `Class ${student.class} — Section ${student.section ?? "A"}`
+          : "Your class will appear here once assigned by the school."}
       </Text>
 
-      {timetable.length === 0 ? (
+      {!student?.class ? (
+        <Text style={styles.empty}>No class assigned to your profile yet.</Text>
+      ) : timetable.length === 0 ? (
         <Text style={styles.empty}>Timetable not set yet for your class.</Text>
       ) : (
         DAYS.map((day) => {
@@ -116,11 +121,13 @@ export default function StudentTimetableScreen() {
           );
         })
       )}
-    </RefreshableScrollView>
+      </RefreshableScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: "#f8fafc" },
   container: { flex: 1, backgroundColor: "#f8fafc" },
   content: { padding: 16, paddingBottom: 32 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },

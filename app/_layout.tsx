@@ -1,7 +1,9 @@
+import "@/tasks/busBackgroundLocationTask";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useAuthStore } from "@/store/authStore";
 import { useStudentAuthStore } from "@/store/studentAuthStore";
 import { GlobalRefreshProvider } from "@/contexts/GlobalRefreshContext";
@@ -26,9 +28,11 @@ export default function RootLayout() {
   }
 
   return (
-    <GlobalRefreshProvider>
-      <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false }} />
-    </GlobalRefreshProvider>
+    <SafeAreaProvider>
+      <GlobalRefreshProvider>
+        <StatusBar style="auto" />
+        <Stack screenOptions={{ headerShown: false }} />
+      </GlobalRefreshProvider>
+    </SafeAreaProvider>
   );
 }

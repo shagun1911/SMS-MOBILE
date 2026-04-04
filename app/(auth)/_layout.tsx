@@ -6,6 +6,8 @@ export default function AuthLayout() {
       <Stack.Screen name="teacher-login" />
       <Stack.Screen name="student-login" />
       <Stack.Screen name="transport-login" />
+      <Stack.Screen name="crew-login" />
+      <Stack.Screen name="support-staff-login" />
     </Stack>
   );
 }

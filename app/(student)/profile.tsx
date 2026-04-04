@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import studentApi from "@/lib/studentApi";
 import { useStudentAuthStore } from "@/store/studentAuthStore";
 import { RefreshableScrollView } from "@/components/RefreshableScrollView";
@@ -88,16 +89,19 @@ export default function StudentProfileScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4f46e5" />
-      </View>
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#4f46e5" />
+        </View>
+      </SafeAreaView>
     );
   }
 
   const data = profile || student;
 
   return (
-    <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <Text style={styles.name}>
           {data?.firstName} {data?.lastName}
@@ -200,7 +204,8 @@ export default function StudentProfileScreen() {
       </View>
 
       
-    </RefreshableScrollView>
+      </RefreshableScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -214,6 +219,7 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: "#f8fafc" },
   container: { flex: 1, backgroundColor: "#f8fafc" },
   content: { padding: 16, paddingBottom: 32 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },

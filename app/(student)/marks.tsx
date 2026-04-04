@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import studentApi from "@/lib/studentApi";
 import { RefreshableScrollView } from "@/components/RefreshableScrollView";
+import { ExamRankProgressChart } from "@/components/ExamRankProgressChart";
 import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
 
 export default function StudentMarksScreen() {
@@ -46,23 +48,48 @@ export default function StudentMarksScreen() {
     return "#b91c1c";
   };
 
+  const rankChartPoints = useMemo(() => {
+    const rows = results
+      .map((r: any) => {
+        const rank = Number(r.rank);
+        if (!Number.isFinite(rank) || rank < 1) return null;
+        const ex = r.examId;
+        const label = String(ex?.title ?? "Exam");
+        const t = ex?.startDate ? new Date(ex.startDate).getTime() : NaN;
+        return { label, rank, t };
+      })
+      .filter(Boolean) as { label: string; rank: number; t: number }[];
+    rows.sort((a, b) => {
+      if (Number.isFinite(a.t) && Number.isFinite(b.t) && a.t !== b.t) return a.t - b.t;
+      if (Number.isFinite(a.t) && !Number.isFinite(b.t)) return -1;
+      if (!Number.isFinite(a.t) && Number.isFinite(b.t)) return 1;
+      return a.label.localeCompare(b.label);
+    });
+    return rows.map(({ label, rank }) => ({ label, rank }));
+  }, [results]);
+
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4f46e5" />
-      </View>
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#4f46e5" />
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>My Results</Text>
       <Text style={styles.subtitle}>Exam results and subject-wise performance</Text>
 
       {results.length === 0 ? (
         <Text style={styles.empty}>No results available yet. Results will appear here once exams are graded.</Text>
       ) : (
-        results.map((result: any) => (
+        <>
+      {rankChartPoints.length > 0 ? <ExamRankProgressChart points={rankChartPoints} /> : null}
+        {results.map((result: any) => (
           <View key={result._id} style={styles.card}>
             <View style={styles.cardHeader}>
               <View>
@@ -102,13 +129,16 @@ export default function StudentMarksScreen() {
               </View>
             )}
           </View>
-        ))
+        ))}
+        </>
       )}
-    </RefreshableScrollView>
+      </RefreshableScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: "#f8fafc" },
   container: { flex: 1, backgroundColor: "#f8fafc" },
   content: { padding: 16, paddingBottom: 32 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },

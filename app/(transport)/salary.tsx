@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import api from "@/lib/api";
 import { RefreshableScrollView } from "@/components/RefreshableScrollView";
 import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
@@ -90,9 +91,28 @@ function formatPaymentMode(mode?: string) {
 
 function sortedPaymentHistory(r: SalaryRecord): SalaryPaymentLine[] {
   const raw = Array.isArray(r.paymentHistory) ? r.paymentHistory : [];
-  return [...raw].sort(
-    (a, b) => new Date(a.paymentDate).getTime() - new Date(b.paymentDate).getTime()
-  );
+  return [...raw].sort((a, b) => {
+    const ta = new Date(a.paymentDate).getTime();
+    const tb = new Date(b.paymentDate).getTime();
+    const na = Number.isNaN(ta);
+    const nb = Number.isNaN(tb);
+    if (na && nb) return 0;
+    if (na) return 1;
+    if (nb) return -1;
+    if (ta !== tb) return ta - tb;
+    return String(a.transactionId ?? "").localeCompare(String(b.transactionId ?? ""));
+  });
+}
+
+/** Newest payroll month first (year + calendar month, not alphabetical month name). */
+function compareSalaryRecordsNewestFirst(a: SalaryRecord, b: SalaryRecord): number {
+  if (a.year !== b.year) return b.year - a.year;
+  const ia = MONTH_ORDER.indexOf(String(a.month ?? "").trim());
+  const ib = MONTH_ORDER.indexOf(String(b.month ?? "").trim());
+  const sa = ia === -1 ? -1 : ia;
+  const sb = ib === -1 ? -1 : ib;
+  if (sa !== sb) return sb - sa;
+  return String(a._id).localeCompare(String(b._id));
 }
 
 function sortOrphanMonthKeysDesc(keys: string[]) {
@@ -105,7 +125,8 @@ function sortOrphanMonthKeysDesc(keys: string[]) {
   });
 }
 
-export default function TeacherSalaryScreen() {
+export default function TransportSalaryScreen() {
+  const router = useRouter();
   const [records, setRecords] = useState<SalaryRecord[]>([]);
   const [otherPayments, setOtherPayments] = useState<OtherPayment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -142,9 +163,13 @@ export default function TeacherSalaryScreen() {
       const k = `${p.type}|${p.title}|${p.amount}|${new Date(p.date).toISOString()}`;
       if (!mergedMap.has(k)) mergedMap.set(k, p);
     });
-    const mergedExtras = [...mergedMap.values()];
+    const mergedExtras = [...mergedMap.values()].sort(
+      (p, q) => new Date(p.date).getTime() - new Date(q.date).getTime()
+    );
 
-    setRecords(Array.isArray(salaryData) ? salaryData : []);
+    const salaryList = Array.isArray(salaryData) ? [...salaryData] : [];
+    salaryList.sort(compareSalaryRecordsNewestFirst);
+    setRecords(salaryList);
     setOtherPayments(mergedExtras);
   }, []);
 
@@ -181,6 +206,14 @@ export default function TeacherSalaryScreen() {
       arr.push(p);
       map.set(k, arr);
     }
+    for (const arr of map.values()) {
+      arr.sort((a, b) => {
+        const ta = new Date(a.date).getTime();
+        const tb = new Date(b.date).getTime();
+        if (Number.isNaN(ta) || Number.isNaN(tb)) return 0;
+        return ta - tb;
+      });
+    }
     return map;
   }, [otherPayments]);
 
@@ -197,9 +230,15 @@ export default function TeacherSalaryScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea} edges={["top"]}>
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#16a34a" />
-          <Text style={styles.centerText}>Loading salary history...</Text>
+        <View style={styles.screenTopFill}>
+          <TouchableOpacity style={styles.backRow} onPress={() => router.back()} activeOpacity={0.7}>
+            <Text style={styles.backText}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Salary</Text>
+          <View style={styles.stateBlock}>
+            <ActivityIndicator size="large" color="#0f766e" />
+            <Text style={styles.centerText}>Loading salary history...</Text>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -208,8 +247,14 @@ export default function TeacherSalaryScreen() {
   if (error) {
     return (
       <SafeAreaView style={styles.safeArea} edges={["top"]}>
-        <View style={styles.center}>
-          <Text style={styles.errorText}>{error}</Text>
+        <View style={styles.screenTopFill}>
+          <TouchableOpacity style={styles.backRow} onPress={() => router.back()} activeOpacity={0.7}>
+            <Text style={styles.backText}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Salary</Text>
+          <View style={[styles.emptyCard, styles.stateBlock]}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -218,11 +263,20 @@ export default function TeacherSalaryScreen() {
   if (!records.length && !otherPayments.length) {
     return (
       <SafeAreaView style={styles.safeArea} edges={["top"]}>
-        <View style={styles.center}>
-          <Text style={styles.emptyTitle}>No salary payments recorded yet.</Text>
-          <Text style={styles.emptySub}>
-            Once payroll is generated and payments are recorded for you, they will appear here.
+        <View style={styles.screenTopFill}>
+          <TouchableOpacity style={styles.backRow} onPress={() => router.back()} activeOpacity={0.7}>
+            <Text style={styles.backText}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Salary</Text>
+          <Text style={styles.subtitle}>
+            Your salary disbursements, bonuses, and adjustments (same as school payroll for your account).
           </Text>
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No salary payments recorded yet.</Text>
+            <Text style={styles.emptySub}>
+              Once payroll is generated and payments are recorded for you, they will appear here.
+            </Text>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -267,8 +321,13 @@ export default function TeacherSalaryScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <RefreshableScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Salary History</Text>
-        <Text style={styles.subtitle}>Monthly payroll and one-time bonuses & adjustments.</Text>
+        <TouchableOpacity style={styles.backRow} onPress={() => router.back()} activeOpacity={0.7}>
+          <Text style={styles.backText}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Salary</Text>
+        <Text style={styles.subtitle}>
+          Your salary disbursements, bonuses, and adjustments (same as school payroll for your account).
+        </Text>
 
         {records.map((r) => {
           const paid = r.paidAmount || 0;
@@ -403,15 +462,30 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#f8fafc" },
   container: { flex: 1, backgroundColor: "#f8fafc" },
   content: { padding: 16, paddingBottom: 32 },
-  center: {
+  backRow: { marginBottom: 12, alignSelf: "flex-start" },
+  backText: { fontSize: 15, fontWeight: "600", color: "#0f766e" },
+  /** Top-aligned shell so loading / empty / error are not vertically centered mid-screen. */
+  screenTopFill: {
     flex: 1,
     backgroundColor: "#f8fafc",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
+    padding: 16,
+    paddingBottom: 32,
   },
-  centerText: { marginTop: 8, fontSize: 13, color: "#64748b" },
-  errorText: { fontSize: 13, color: "#b91c1c", textAlign: "center" },
+  stateBlock: {
+    marginTop: 24,
+    alignItems: "center",
+    alignSelf: "stretch",
+  },
+  emptyCard: {
+    marginTop: 16,
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  centerText: { marginTop: 16, fontSize: 13, color: "#64748b" },
+  errorText: { fontSize: 14, color: "#b91c1c", textAlign: "center", lineHeight: 20 },
   emptyTitle: {
     fontSize: 16,
     fontWeight: "600",

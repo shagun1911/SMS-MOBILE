@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useAuthStore } from "@/store/authStore";
 import { useStudentAuthStore } from "@/store/studentAuthStore";
+import { resolveStaffHomeRoute } from "@/lib/staffPortalConfig";
 
 export default function LandingScreen() {
   const router = useRouter();
@@ -22,12 +23,12 @@ export default function LandingScreen() {
       await new Promise((r) => setTimeout(r, 100));
       const auth = useAuthStore.getState();
       if (auth.isAuthenticated && auth.user) {
-        if (auth.user.role === "transport_manager") {
-          router.replace("/(transport)/dashboard");
-        } else {
-          router.replace("/(teacher)/dashboard");
+        const home = resolveStaffHomeRoute(auth.user.role);
+        if (home) {
+          router.replace(home);
+          return;
         }
-        return;
+        useAuthStore.getState().logout();
       }
       if (useStudentAuthStore.getState().isAuthenticated) {
         router.replace("/(student)/dashboard");
@@ -63,6 +64,11 @@ export default function LandingScreen() {
         <View style={styles.card}>
           <Text style={styles.title}>SMS Portal</Text>
           <Text style={styles.subtitle}>Choose how you want to sign in</Text>
+
+          <Text style={styles.sectionLabel}>Staff</Text>
+          <Text style={styles.sectionHint}>
+            Mobile number or email + password — same as school admin Staff / login credentials.
+          </Text>
           <View style={styles.buttonsRow}>
             <View style={styles.row}>
               <TouchableOpacity
@@ -71,25 +77,47 @@ export default function LandingScreen() {
                 activeOpacity={0.85}
               >
                 <Text style={styles.buttonLabel}>Teacher</Text>
-                <Text style={styles.buttonSubtext}>School staff login</Text>
+                <Text style={styles.buttonSubtext}>Teacher login</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.button, styles.studentButton]}
+                style={[styles.button, styles.transportButton]}
+                onPress={() => router.push("/(auth)/transport-login")}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.buttonLabel}>Transport</Text>
+                <Text style={styles.buttonSubtext}>Transport manager</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.row}>
+              <TouchableOpacity
+                style={[styles.button, styles.crewButton]}
+                onPress={() => router.push("/(auth)/crew-login")}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.buttonLabel}>Driver / Conductor</Text>
+                <Text style={styles.buttonSubtext}>Bus driver & conductor</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.supportStaffButton]}
+                onPress={() => router.push("/(auth)/support-staff-login")}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.buttonLabel}>Other staff</Text>
+                <Text style={styles.buttonSubtext}>Accountant, cleaning, other</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <Text style={[styles.sectionLabel, styles.sectionAfterStudent]}>Student</Text>
+          <View style={styles.buttonsRow}>
+            <View style={styles.row}>
+              <TouchableOpacity
+                style={[styles.button, styles.studentButton, styles.fullWidthInRow]}
                 onPress={() => router.push("/(auth)/student-login")}
                 activeOpacity={0.85}
               >
                 <Text style={styles.buttonLabel}>Student</Text>
                 <Text style={styles.buttonSubtext}>Student portal login</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.row}>
-              <TouchableOpacity
-                style={[styles.button, styles.transportButton, styles.fullWidthButton]}
-                onPress={() => router.push("/(auth)/transport-login")}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.buttonLabel}>Transport</Text>
-                <Text style={styles.buttonSubtext}>Transport manager login</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -147,12 +175,32 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 28,
   },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#475569",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginBottom: 6,
+  },
+  sectionHint: {
+    fontSize: 13,
+    color: "#64748b",
+    marginBottom: 14,
+    lineHeight: 18,
+  },
+  sectionAfterStudent: {
+    marginTop: 22,
+  },
   buttonsRow: {
     gap: 16,
   },
   row: {
     flexDirection: "row",
     gap: 16,
+  },
+  fullWidthInRow: {
+    flex: 1,
   },
   button: {
     flex: 1,
@@ -170,8 +218,11 @@ const styles = StyleSheet.create({
   transportButton: {
     backgroundColor: "#0f766e",
   },
-  fullWidthButton: {
-    flex: 1,
+  crewButton: {
+    backgroundColor: "#c2410c",
+  },
+  supportStaffButton: {
+    backgroundColor: "#9333ea",
   },
   buttonLabel: {
     fontSize: 18,
