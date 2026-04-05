@@ -7,7 +7,7 @@ import {
   ActivityIndicator,
   Platform,
 } from "react-native";
-import MapView, { Marker, PROVIDER_GOOGLE, type MapMarker } from "react-native-maps";
+import MapView, { Marker, PROVIDER_GOOGLE, type Region } from "react-native-maps";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { io, type Socket } from "socket.io-client";
@@ -26,6 +26,22 @@ type Loc = {
 
 const DEFAULT_STALE_MS = 120_000;
 
+const INDIA_FALLBACK: Region = {
+  latitude: 20.5937,
+  longitude: 78.9629,
+  latitudeDelta: 8,
+  longitudeDelta: 8,
+};
+
+function regionFor(lat: number, lng: number, delta = 0.04): Region {
+  return {
+    latitude: lat,
+    longitude: lng,
+    latitudeDelta: delta,
+    longitudeDelta: delta,
+  };
+}
+
 function ageMs(iso: string): number {
   const t = new Date(iso).getTime();
   if (Number.isNaN(t)) return Infinity;
@@ -35,8 +51,8 @@ function ageMs(iso: string): number {
 export default function StudentBusTrackingScreen() {
   const router = useRouter();
   const token = useStudentAuthStore((s) => s.token);
-  const markerRef = useRef<MapMarker | null>(null);
   const mapRef = useRef<MapView | null>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,20 +65,20 @@ export default function StudentBusTrackingScreen() {
 
   const applyLocation = useCallback((loc: Loc) => {
     setLocation(loc);
-    const coord = { latitude: loc.lat, longitude: loc.lng };
-    requestAnimationFrame(() => {
-      markerRef.current?.animateMarkerToCoordinate(coord, 500);
-      mapRef.current?.animateToRegion(
-        {
-          latitude: loc.lat,
-          longitude: loc.lng,
-          latitudeDelta: 0.025,
-          longitudeDelta: 0.025,
-        },
-        450
-      );
-    });
   }, []);
+
+  useEffect(() => {
+    if (!location || !mapReady || !mapRef.current) return;
+    const next = regionFor(location.lat, location.lng, 0.04);
+    const id = requestAnimationFrame(() => {
+      try {
+        mapRef.current?.animateToRegion(next, 450);
+      } catch {
+        /* native map not ready */
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [location, mapReady]);
 
   const loadRest = useCallback(async () => {
     setError(null);
@@ -106,9 +122,10 @@ export default function StudentBusTrackingScreen() {
         await loadRest();
       } catch (e: unknown) {
         if (!cancelled) {
-          const msg = e && typeof e === "object" && "response" in e
-            ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
-            : null;
+          const msg =
+            e && typeof e === "object" && "response" in e
+              ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
+              : null;
           setError(msg || "Could not load bus information.");
         }
       } finally {
@@ -127,36 +144,48 @@ export default function StudentBusTrackingScreen() {
       setSocketConnected(false);
       return;
     }
-    const socket = io(SOCKET_BASE_URL, {
-      path: "/socket.io",
-      transports: ["websocket"],
-      auth: { token },
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 2000,
-      reconnectionDelayMax: 15_000,
-    });
+    let socket: Socket;
+    try {
+      socket = io(SOCKET_BASE_URL, {
+        path: "/socket.io",
+        transports: ["websocket"],
+        auth: { token },
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 2000,
+        reconnectionDelayMax: 15_000,
+        timeout: 20_000,
+      });
+    } catch {
+      return;
+    }
     socketRef.current = socket;
 
-    socket.on("connect", () => setSocketConnected(true));
-    socket.on("disconnect", () => setSocketConnected(false));
+    const onConnect = () => setSocketConnected(true);
+    const onDisconnect = () => setSocketConnected(false);
 
-    socket.on("bus:location:sync", (payload: { location: Loc | null; staleAfterMs?: number; offline?: boolean }) => {
-      if (typeof payload?.staleAfterMs === "number") {
-        setStaleAfterMs(payload.staleAfterMs);
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+
+    socket.on(
+      "bus:location:sync",
+      (payload: { location: Loc | null; staleAfterMs?: number; offline?: boolean }) => {
+        if (typeof payload?.staleAfterMs === "number") {
+          setStaleAfterMs(payload.staleAfterMs);
+        }
+        if (payload?.location && typeof payload.location.lat === "number") {
+          applyLocation({
+            lat: payload.location.lat,
+            lng: payload.location.lng,
+            updatedAt:
+              typeof payload.location.updatedAt === "string"
+                ? payload.location.updatedAt
+                : new Date().toISOString(),
+            accuracy: payload.location.accuracy,
+          });
+        }
       }
-      if (payload?.location && typeof payload.location.lat === "number") {
-        applyLocation({
-          lat: payload.location.lat,
-          lng: payload.location.lng,
-          updatedAt:
-            typeof payload.location.updatedAt === "string"
-              ? payload.location.updatedAt
-              : new Date().toISOString(),
-          accuracy: payload.location.accuracy,
-        });
-      }
-    });
+    );
 
     socket.on(
       "bus:location",
@@ -172,6 +201,8 @@ export default function StudentBusTrackingScreen() {
     );
 
     return () => {
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
       socket.removeAllListeners();
       socket.disconnect();
       socketRef.current = null;
@@ -189,21 +220,6 @@ export default function StudentBusTrackingScreen() {
   useRegisterScreenRefresh(pullReload);
 
   const offline = !location || ageMs(location.updatedAt) > staleAfterMs;
-
-  const initialRegion =
-    location != null
-      ? {
-          latitude: location.lat,
-          longitude: location.lng,
-          latitudeDelta: 0.04,
-          longitudeDelta: 0.04,
-        }
-      : {
-          latitude: 20.5937,
-          longitude: 78.9629,
-          latitudeDelta: 8,
-          longitudeDelta: 8,
-        };
 
   if (loading) {
     return (
@@ -246,7 +262,8 @@ export default function StudentBusTrackingScreen() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>School transport</Text>
             <Text style={styles.muted}>
-              You are not registered for school bus transport. Contact the school office if you should be on a bus route.
+              You are not registered for school bus transport. Contact the school office if you should be on a bus
+              route.
             </Text>
           </View>
         </RefreshableScrollView>
@@ -294,31 +311,42 @@ export default function StudentBusTrackingScreen() {
           ) : null}
         </View>
       ) : (
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          provider={
-            Platform.OS === "android" && GOOGLE_MAPS_API_KEY ? PROVIDER_GOOGLE : undefined
-          }
-          initialRegion={initialRegion}
-          showsUserLocation
-          showsMyLocationButton={false}
-        >
-          {location ? (
-            <Marker
-              ref={markerRef}
-              coordinate={{ latitude: location.lat, longitude: location.lng }}
-              title="School bus"
-              description={offline ? "Last known position" : "Live position"}
-            />
-          ) : null}
-        </MapView>
+        <View style={styles.mapWrap}>
+          {/*
+            Do NOT use showsUserLocation: students often have no location permission; on Android this can crash
+            the Google Maps layer when it tries to show the device dot.
+          */}
+          <MapView
+            ref={mapRef}
+            style={StyleSheet.absoluteFill}
+            provider={
+              Platform.OS === "android" && GOOGLE_MAPS_API_KEY.length > 0 ? PROVIDER_GOOGLE : undefined
+            }
+            initialRegion={location != null ? regionFor(location.lat, location.lng, 0.06) : INDIA_FALLBACK}
+            onMapReady={() => setMapReady(true)}
+            showsUserLocation={false}
+            showsMyLocationButton={false}
+            mapType="standard"
+            loadingEnabled
+            moveOnMarkerPress={false}
+          >
+            {location ? (
+              <Marker
+                coordinate={{ latitude: location.lat, longitude: location.lng }}
+                title="School bus"
+                description={offline ? "Last known position" : "Live position"}
+                tracksViewChanges={false}
+              />
+            ) : null}
+          </MapView>
+        </View>
       )}
 
       {location ? (
         <View style={styles.footer}>
           <Text style={styles.footerHint}>
-            Updated {new Date(location.updatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+            Updated{" "}
+            {new Date(location.updatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
           </Text>
         </View>
       ) : (
@@ -373,7 +401,7 @@ const styles = StyleSheet.create({
   dotOn: { backgroundColor: "#16a34a" },
   dotOff: { backgroundColor: "#94a3b8" },
   statusText: { fontSize: 13, color: "#475569", flex: 1 },
-  map: { flex: 1, width: "100%" },
+  mapWrap: { flex: 1, minHeight: 200, width: "100%", backgroundColor: "#e2e8f0" },
   webFallback: { flex: 1, padding: 24, justifyContent: "center" },
   coords: { marginTop: 12, fontSize: 14, color: "#0f172a" },
   footer: { padding: 12, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#e2e8f0" },
