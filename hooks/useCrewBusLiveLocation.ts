@@ -11,6 +11,8 @@ import { BUS_LOCATION_TASK } from "@/tasks/busBackgroundLocationTask";
 export type CrewLocationShareState = {
   hasBusAssignment: boolean | null;
   permission: Location.PermissionStatus | "unknown";
+  /** False when manifest/permission blocks background task — live updates still work while app is open. */
+  backgroundSharingEnabled: boolean;
   socketConnected: boolean;
   sharing: boolean;
   lastError: string | null;
@@ -27,6 +29,7 @@ export function useCrewBusLiveLocation(active: boolean): CrewLocationShareState 
 
   const [hasBusAssignment, setHasBusAssignment] = useState<boolean | null>(null);
   const [permission, setPermission] = useState<CrewLocationShareState["permission"]>("unknown");
+  const [backgroundSharingEnabled, setBackgroundSharingEnabled] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -90,22 +93,29 @@ export function useCrewBusLiveLocation(active: boolean): CrewLocationShareState 
           return;
         }
 
-        const bg = await Location.requestBackgroundPermissionsAsync();
-        if (cancelled) return;
-        if (bg.status === "granted") {
-          const started = await Location.hasStartedLocationUpdatesAsync(BUS_LOCATION_TASK);
-          if (!started) {
-            await Location.startLocationUpdatesAsync(BUS_LOCATION_TASK, {
-              accuracy: Location.Accuracy.Balanced,
-              timeInterval: 10_000,
-              distanceInterval: 25,
-              foregroundService: {
-                notificationTitle: "Bus location sharing",
-                notificationBody: "Students on your route can see live bus position.",
-              },
-              showsBackgroundLocationIndicator: true,
-            });
+        setBackgroundSharingEnabled(false);
+        try {
+          const bg = await Location.requestBackgroundPermissionsAsync();
+          if (cancelled) return;
+          if (bg.status === "granted") {
+            const started = await Location.hasStartedLocationUpdatesAsync(BUS_LOCATION_TASK);
+            if (!started) {
+              await Location.startLocationUpdatesAsync(BUS_LOCATION_TASK, {
+                accuracy: Location.Accuracy.Balanced,
+                timeInterval: 10_000,
+                distanceInterval: 25,
+                foregroundService: {
+                  notificationTitle: "Bus location sharing",
+                  notificationBody: "Students on your route can see live bus position.",
+                },
+                showsBackgroundLocationIndicator: true,
+              });
+            }
+            if (!cancelled) setBackgroundSharingEnabled(true);
           }
+        } catch {
+          /* Missing ACCESS_BACKGROUND_LOCATION in APK, user chose “While using”, etc. — keep foreground + socket. */
+          if (!cancelled) setBackgroundSharingEnabled(false);
         }
 
         const socket = io(SOCKET_BASE_URL, {
@@ -187,6 +197,7 @@ export function useCrewBusLiveLocation(active: boolean): CrewLocationShareState 
   return {
     hasBusAssignment,
     permission,
+    backgroundSharingEnabled,
     socketConnected,
     sharing,
     lastError,

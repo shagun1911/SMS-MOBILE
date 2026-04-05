@@ -214,7 +214,9 @@ export default function CrewDashboardScreen() {
           <View style={styles.liveBannerOk}>
             <Text style={styles.liveBannerTitle}>Live tracking on</Text>
             <Text style={styles.liveBannerText}>
-              Your GPS is shared with students assigned to your bus (foreground and background when allowed).
+              {liveShare.backgroundSharingEnabled
+                ? "Your GPS is shared while the app is open and in the background (when the system allows)."
+                : "Your GPS is shared while this screen is open. For sharing when the app is in the background, update to the latest app build and set location to “Allow all the time” in Android settings."}
             </Text>
           </View>
         ) : null}
