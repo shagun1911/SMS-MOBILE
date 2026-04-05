@@ -7,40 +7,18 @@ import {
   ActivityIndicator,
   Platform,
 } from "react-native";
-import MapView, { Marker, PROVIDER_GOOGLE, type Region } from "react-native-maps";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { io, type Socket } from "socket.io-client";
 import studentApi from "@/lib/studentApi";
 import { useStudentAuthStore } from "@/store/studentAuthStore";
-import { SOCKET_BASE_URL, GOOGLE_MAPS_API_KEY } from "@/constants/env";
+import { SOCKET_BASE_URL } from "@/constants/env";
 import { RefreshableScrollView } from "@/components/RefreshableScrollView";
 import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
-
-type Loc = {
-  lat: number;
-  lng: number;
-  updatedAt: string;
-  accuracy?: number;
-};
+import BusMapPanel from "@/components/busTracking/BusMapPanel";
+import type { BusTrackingLocation } from "@/components/busTracking/types";
 
 const DEFAULT_STALE_MS = 120_000;
-
-const INDIA_FALLBACK: Region = {
-  latitude: 20.5937,
-  longitude: 78.9629,
-  latitudeDelta: 8,
-  longitudeDelta: 8,
-};
-
-function regionFor(lat: number, lng: number, delta = 0.04): Region {
-  return {
-    latitude: lat,
-    longitude: lng,
-    latitudeDelta: delta,
-    longitudeDelta: delta,
-  };
-}
 
 function ageMs(iso: string): number {
   const t = new Date(iso).getTime();
@@ -51,34 +29,19 @@ function ageMs(iso: string): number {
 export default function StudentBusTrackingScreen() {
   const router = useRouter();
   const token = useStudentAuthStore((s) => s.token);
-  const mapRef = useRef<MapView | null>(null);
-  const [mapReady, setMapReady] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [usesTransport, setUsesTransport] = useState(false);
   const [busMeta, setBusMeta] = useState<{ busNumber?: string; routeName?: string } | null>(null);
-  const [location, setLocation] = useState<Loc | null>(null);
+  const [location, setLocation] = useState<BusTrackingLocation | null>(null);
   const [staleAfterMs, setStaleAfterMs] = useState(DEFAULT_STALE_MS);
   const [socketConnected, setSocketConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
 
-  const applyLocation = useCallback((loc: Loc) => {
+  const applyLocation = useCallback((loc: BusTrackingLocation) => {
     setLocation(loc);
   }, []);
-
-  useEffect(() => {
-    if (!location || !mapReady || !mapRef.current) return;
-    const next = regionFor(location.lat, location.lng, 0.04);
-    const id = requestAnimationFrame(() => {
-      try {
-        mapRef.current?.animateToRegion(next, 450);
-      } catch {
-        /* native map not ready */
-      }
-    });
-    return () => cancelAnimationFrame(id);
-  }, [location, mapReady]);
 
   const loadRest = useCallback(async () => {
     setError(null);
@@ -169,7 +132,7 @@ export default function StudentBusTrackingScreen() {
 
     socket.on(
       "bus:location:sync",
-      (payload: { location: Loc | null; staleAfterMs?: number; offline?: boolean }) => {
+      (payload: { location: BusTrackingLocation | null; staleAfterMs?: number; offline?: boolean }) => {
         if (typeof payload?.staleAfterMs === "number") {
           setStaleAfterMs(payload.staleAfterMs);
         }
@@ -303,7 +266,7 @@ export default function StudentBusTrackingScreen() {
 
       {Platform.OS === "web" ? (
         <View style={styles.webFallback}>
-          <Text style={styles.muted}>Live map is available in the iOS or Android app.</Text>
+          <Text style={styles.muted}>Use the iOS or Android app for the full bus tracking view.</Text>
           {location ? (
             <Text style={styles.coords}>
               Last: {location.lat.toFixed(5)}, {location.lng.toFixed(5)}
@@ -311,35 +274,7 @@ export default function StudentBusTrackingScreen() {
           ) : null}
         </View>
       ) : (
-        <View style={styles.mapWrap}>
-          {/*
-            Do NOT use showsUserLocation: students often have no location permission; on Android this can crash
-            the Google Maps layer when it tries to show the device dot.
-          */}
-          <MapView
-            ref={mapRef}
-            style={StyleSheet.absoluteFill}
-            provider={
-              Platform.OS === "android" && GOOGLE_MAPS_API_KEY.length > 0 ? PROVIDER_GOOGLE : undefined
-            }
-            initialRegion={location != null ? regionFor(location.lat, location.lng, 0.06) : INDIA_FALLBACK}
-            onMapReady={() => setMapReady(true)}
-            showsUserLocation={false}
-            showsMyLocationButton={false}
-            mapType="standard"
-            loadingEnabled
-            moveOnMarkerPress={false}
-          >
-            {location ? (
-              <Marker
-                coordinate={{ latitude: location.lat, longitude: location.lng }}
-                title="School bus"
-                description={offline ? "Last known position" : "Live position"}
-                tracksViewChanges={false}
-              />
-            ) : null}
-          </MapView>
-        </View>
+        <BusMapPanel location={location} offline={offline} />
       )}
 
       {location ? (
@@ -401,7 +336,6 @@ const styles = StyleSheet.create({
   dotOn: { backgroundColor: "#16a34a" },
   dotOff: { backgroundColor: "#94a3b8" },
   statusText: { fontSize: 13, color: "#475569", flex: 1 },
-  mapWrap: { flex: 1, minHeight: 200, width: "100%", backgroundColor: "#e2e8f0" },
   webFallback: { flex: 1, padding: 24, justifyContent: "center" },
   coords: { marginTop: 12, fontSize: 14, color: "#0f172a" },
   footer: { padding: 12, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#e2e8f0" },

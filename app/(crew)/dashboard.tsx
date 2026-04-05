@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   Alert,
   useWindowDimensions,
+  Platform,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -224,6 +226,27 @@ export default function CrewDashboardScreen() {
           <Text style={styles.liveBannerError}>{liveShare.lastError}</Text>
         ) : null}
 
+        {Platform.OS === "android" &&
+        liveShare?.permission === "granted" &&
+        liveShare?.hasBusAssignment &&
+        !liveShare.backgroundSharingEnabled ? (
+          <View style={styles.liveBannerNeutral}>
+            <Text style={styles.liveBannerTitle}>Allow location “all the time” (optional)</Text>
+            <Text style={styles.liveBannerText}>
+              Android usually shows “While using only” in the first popup. To get “Allow all the time”, open your
+              phone Settings → Apps → SMS Portal → Permissions → Location, then pick “Allow all the time” or “Always”
+              (Samsung / Xiaomi / Oppo may use different labels or a submenu).
+            </Text>
+            <TouchableOpacity
+              style={styles.settingsLink}
+              onPress={() => Linking.openSettings()}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.settingsLinkText}>Open app settings</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         <TouchableOpacity
           style={styles.card}
           activeOpacity={0.85}
@@ -403,6 +426,13 @@ const styles = StyleSheet.create({
   liveBannerTitle: { fontSize: 14, fontWeight: "700", color: "#0f172a", marginBottom: 4 },
   liveBannerText: { fontSize: 13, color: "#475569", lineHeight: 18 },
   liveBannerError: { fontSize: 12, color: "#b91c1c", marginBottom: 12 },
+  settingsLink: {
+    marginTop: 12,
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  settingsLinkText: { fontSize: 14, fontWeight: "700", color: "#c2410c" },
   card: {
     flexDirection: "row",
     alignItems: "center",
