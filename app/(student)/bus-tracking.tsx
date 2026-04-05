@@ -26,6 +26,23 @@ function ageMs(iso: string): number {
   return Date.now() - t;
 }
 
+function isValidBusCoord(lat: unknown, lng: unknown): boolean {
+  return (
+    typeof lat === "number" &&
+    typeof lng === "number" &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180
+  );
+}
+
+function formatUpdatedAt(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
 export default function StudentBusTrackingScreen() {
   const router = useRouter();
   const token = useStudentAuthStore((s) => s.token);
@@ -40,6 +57,7 @@ export default function StudentBusTrackingScreen() {
   const socketRef = useRef<Socket | null>(null);
 
   const applyLocation = useCallback((loc: BusTrackingLocation) => {
+    if (!isValidBusCoord(loc.lat, loc.lng)) return;
     setLocation(loc);
   }, []);
 
@@ -65,12 +83,12 @@ export default function StudentBusTrackingScreen() {
       setStaleAfterMs(locPayload.staleAfterMs);
     }
     const loc = locPayload?.location;
-    if (loc && typeof loc.lat === "number" && typeof loc.lng === "number") {
+    if (loc && isValidBusCoord(loc.lat, loc.lng)) {
       applyLocation({
         lat: loc.lat,
         lng: loc.lng,
         updatedAt: typeof loc.updatedAt === "string" ? loc.updatedAt : new Date().toISOString(),
-        accuracy: loc.accuracy,
+        accuracy: typeof loc.accuracy === "number" ? loc.accuracy : undefined,
       });
     } else {
       setLocation(null);
@@ -136,7 +154,10 @@ export default function StudentBusTrackingScreen() {
         if (typeof payload?.staleAfterMs === "number") {
           setStaleAfterMs(payload.staleAfterMs);
         }
-        if (payload?.location && typeof payload.location.lat === "number") {
+        if (
+          payload?.location &&
+          isValidBusCoord(payload.location.lat, payload.location.lng)
+        ) {
           applyLocation({
             lat: payload.location.lat,
             lng: payload.location.lng,
@@ -144,7 +165,8 @@ export default function StudentBusTrackingScreen() {
               typeof payload.location.updatedAt === "string"
                 ? payload.location.updatedAt
                 : new Date().toISOString(),
-            accuracy: payload.location.accuracy,
+            accuracy:
+              typeof payload.location.accuracy === "number" ? payload.location.accuracy : undefined,
           });
         }
       }
@@ -274,15 +296,14 @@ export default function StudentBusTrackingScreen() {
           ) : null}
         </View>
       ) : (
-        <BusMapPanel location={location} offline={offline} />
+        <View style={styles.mapSection}>
+          <BusMapPanel location={location} offline={offline} />
+        </View>
       )}
 
       {location ? (
         <View style={styles.footer}>
-          <Text style={styles.footerHint}>
-            Updated{" "}
-            {new Date(location.updatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
-          </Text>
+          <Text style={styles.footerHint}>Updated {formatUpdatedAt(location.updatedAt)}</Text>
         </View>
       ) : (
         <View style={styles.footer}>
@@ -340,4 +361,5 @@ const styles = StyleSheet.create({
   coords: { marginTop: 12, fontSize: 14, color: "#0f172a" },
   footer: { padding: 12, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#e2e8f0" },
   footerHint: { fontSize: 12, color: "#64748b", textAlign: "center" },
+  mapSection: { flex: 1, minHeight: 0 },
 });
