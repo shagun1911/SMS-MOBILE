@@ -708,7 +708,32 @@ export default function TransportDashboard() {
         <Text style={styles.salaryChevron}>›</Text>
       </TouchableOpacity>
 
+      <TouchableOpacity
+        style={styles.salaryCard}
+        activeOpacity={0.8}
+        onPress={() => router.push("/(transport)/my-attendance" as any)}
+      >
+        <Text style={styles.salaryEmoji}>🗓️</Text>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.salaryCardTitle}>My Attendance</Text>
+          <Text style={styles.salaryCardHint}>View your monthly present/absent calendar</Text>
+        </View>
+        <Text style={styles.salaryChevron}>›</Text>
+      </TouchableOpacity>
+
       <View style={styles.section}>
+        <TouchableOpacity
+          style={styles.salaryCard}
+          activeOpacity={0.8}
+          onPress={() => router.push("/(transport)/attendance" as any)}
+        >
+          <Text style={styles.salaryEmoji}>🗓️</Text>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.salaryCardTitle}>Attendance Management</Text>
+            <Text style={styles.salaryCardHint}>Mark present, save draft, and final submit for drivers/conductors</Text>
+          </View>
+          <Text style={styles.salaryChevron}>›</Text>
+        </TouchableOpacity>
         <View style={styles.sectionTitleRow}>
           <Text style={styles.sectionTitle}>Buses</Text>
           <TouchableOpacity style={styles.addBusBtn} onPress={openAddBusModal} activeOpacity={0.85}>

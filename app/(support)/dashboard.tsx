@@ -17,7 +17,6 @@ import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
 import { RefreshableScrollView } from "@/components/RefreshableScrollView";
 import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
-import { userNotificationSalaryParams } from "@/lib/staffPortalConfig";
 
 type NotifItem = { id: string; read: boolean };
 
@@ -70,7 +69,7 @@ export default function SupportDashboardScreen() {
 
   const refreshBadge = useCallback(async () => {
     try {
-      const res = await api.get("/user-notifications", { params: userNotificationSalaryParams() });
+      const res = await api.get("/user-notifications");
       const raw = res.data?.data ?? res.data ?? [];
       const list = Array.isArray(raw) ? raw : [];
       setNotifItems(normalize(list));
@@ -83,7 +82,7 @@ export default function SupportDashboardScreen() {
     setNotifLoading(true);
     setNotifError(null);
     try {
-      const res = await api.get("/user-notifications", { params: userNotificationSalaryParams() });
+      const res = await api.get("/user-notifications");
       const raw = res.data?.data ?? res.data ?? [];
       const list = Array.isArray(raw) ? raw : [];
       const unreadOnly = list.filter(
@@ -111,7 +110,7 @@ export default function SupportDashboardScreen() {
   const markAllRead = async () => {
     try {
       setMarkingAll(true);
-      await api.patch("/user-notifications/read-all", {}, { params: userNotificationSalaryParams() });
+      await api.patch("/user-notifications/read-all");
       setNotifRows([]);
       await refreshBadge();
     } catch (e: any) {
@@ -142,7 +141,7 @@ export default function SupportDashboardScreen() {
 
   useRegisterScreenRefresh(refreshBadge);
 
-  const unreadSalaryCount = notifItems.filter((n) => !n.read).length;
+  const unreadNotifCount = notifItems.filter((n) => !n.read).length;
 
   if (!user) {
     return (
@@ -171,10 +170,10 @@ export default function SupportDashboardScreen() {
               activeOpacity={0.75}
             >
               <Text style={styles.iconButtonEmoji}>🔔</Text>
-              {unreadSalaryCount > 0 ? (
+              {unreadNotifCount > 0 ? (
                 <View style={styles.notifBadge}>
                   <Text style={styles.notifBadgeText}>
-                    {unreadSalaryCount > 9 ? "9+" : String(unreadSalaryCount)}
+                    {unreadNotifCount > 9 ? "9+" : String(unreadNotifCount)}
                   </Text>
                 </View>
               ) : null}
@@ -188,9 +187,20 @@ export default function SupportDashboardScreen() {
 
       <View style={styles.section}>
         <Text style={styles.welcomeTitle}>Home</Text>
-        <Text style={styles.welcomeSub}>
-          Salary updates and payroll notifications for your account.
-        </Text>
+        <Text style={styles.welcomeSub}>Account updates and attendance notifications.</Text>
+
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.85}
+          onPress={() => router.push("/(support)/my-attendance" as any)}
+        >
+          <Text style={styles.cardEmoji}>🗓️</Text>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.cardTitle}>My Attendance</Text>
+            <Text style={styles.cardHint}>Monthly present/absent calendar</Text>
+          </View>
+          <Text style={styles.cardChevron}>›</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.card}
@@ -250,7 +260,7 @@ export default function SupportDashboardScreen() {
             ) : notifError ? (
               <Text style={styles.modalErr}>{notifError}</Text>
             ) : notifRows.length === 0 ? (
-              <Text style={styles.modalEmpty}>No salary notifications.</Text>
+              <Text style={styles.modalEmpty}>No unread notifications.</Text>
             ) : (
               <ScrollView
                 style={{ maxHeight: listMaxHeight }}

@@ -152,6 +152,7 @@ export default function TeacherDashboard() {
     { icon: "📋", title: "Attendance", route: "/(teacher)/attendance", accent: "#db2777", bg: "#fdf2f8" },
     { icon: "📚", title: "Homework", route: "/(teacher)/homework", accent: "#16a34a", bg: "#f0fdf4" },
     { icon: "📊", title: "Enter Marks", route: "/(teacher)/marks", accent: "#0891b2", bg: "#ecfeff" },
+    { icon: "🗓️", title: "My Attendance", route: "/(teacher)/my-attendance", accent: "#16a34a", bg: "#ecfdf3" },
     { icon: "💵", title: "Salary", route: "/(teacher)/salary", accent: "#16a34a", bg: "#ecfdf3" },
     { icon: "📅", title: "Timetable", route: "/(teacher)/timetable", accent: "#d97706", bg: "#fffbeb" },
     { icon: "🚌", title: "Buses", route: "/(teacher)/bus-routes", accent: "#0ea5e9", bg: "#e0f2fe" },
@@ -230,7 +231,7 @@ export default function TeacherDashboard() {
           >
             <Text style={styles.modalTitle}>Notifications</Text>
             <Text style={styles.modalSubtitle}>
-              Unread salary and account updates only.
+              Unread account and attendance updates.
             </Text>
 
             {unreadNotifCount > 0 && (
@@ -261,7 +262,7 @@ export default function TeacherDashboard() {
               </View>
             ) : !notifItems.length ? (
               <View style={styles.modalCenter}>
-                <Text style={styles.modalEmpty}>No salary updates yet.</Text>
+                <Text style={styles.modalEmpty}>No unread notifications.</Text>
               </View>
             ) : unreadNotifItems.length === 0 ? (
               <View style={styles.modalCenter}>

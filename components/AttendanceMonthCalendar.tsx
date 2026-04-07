@@ -12,6 +12,7 @@ type Props = {
   year: number;
   monthIndex: number;
   absentYmdSet: Set<string>;
+  presentYmdSet?: Set<string>;
   onPrevMonth: () => void;
   onNextMonth: () => void;
 };
@@ -28,6 +29,7 @@ export function AttendanceMonthCalendar({
   year,
   monthIndex,
   absentYmdSet,
+  presentYmdSet,
   onPrevMonth,
   onNextMonth,
 }: Props) {
@@ -102,6 +104,7 @@ export function AttendanceMonthCalendar({
             }
             const ymd = ymdFromParts(year, monthIndex, day);
             const absent = absentYmdSet.has(ymd);
+            const present = !absent && Boolean(presentYmdSet?.has(ymd));
             const isToday = ymd === todayYmd;
             return (
               <View key={ymd} style={styles.dayCell}>
@@ -109,12 +112,18 @@ export function AttendanceMonthCalendar({
                   style={[
                     styles.dayInner,
                     absent && styles.dayAbsent,
+                    present && styles.dayPresent,
                     isToday && !absent && styles.dayToday,
                     isToday && absent && styles.dayTodayAbsent,
                   ]}
                 >
                   <Text
-                    style={[styles.dayNum, absent && styles.dayNumAbsent, isToday && styles.dayNumToday]}
+                    style={[
+                      styles.dayNum,
+                      absent && styles.dayNumAbsent,
+                      present && styles.dayNumPresent,
+                      isToday && styles.dayNumToday,
+                    ]}
                   >
                     {day}
                   </Text>
@@ -126,6 +135,8 @@ export function AttendanceMonthCalendar({
       ))}
 
       <View style={styles.legendRow}>
+        <View style={styles.legendSwatchPresent} />
+        <Text style={styles.legendLabel}>Present</Text>
         <View style={styles.legendSwatch} />
         <Text style={styles.legendLabel}>Absent</Text>
       </View>
@@ -213,6 +224,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#f87171",
   },
+  dayPresent: {
+    backgroundColor: "#dcfce7",
+    borderWidth: 1,
+    borderColor: "#4ade80",
+  },
   dayToday: {
     borderWidth: 2,
     borderColor: "#4f46e5",
@@ -229,6 +245,10 @@ const styles = StyleSheet.create({
   },
   dayNumAbsent: {
     color: "#991b1b",
+    fontWeight: "700",
+  },
+  dayNumPresent: {
+    color: "#166534",
     fontWeight: "700",
   },
   dayNumToday: {},
@@ -249,6 +269,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#fecaca",
     borderWidth: 1,
     borderColor: "#f87171",
+  },
+  legendSwatchPresent: {
+    width: 14,
+    height: 14,
+    borderRadius: 4,
+    backgroundColor: "#dcfce7",
+    borderWidth: 1,
+    borderColor: "#4ade80",
   },
   legendLabel: {
     fontSize: 12,

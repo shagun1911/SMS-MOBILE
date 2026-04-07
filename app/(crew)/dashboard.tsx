@@ -19,7 +19,6 @@ import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
 import { RefreshableScrollView } from "@/components/RefreshableScrollView";
 import { useRegisterScreenRefresh } from "@/hooks/useRegisterScreenRefresh";
-import { userNotificationSalaryParams } from "@/lib/staffPortalConfig";
 import { useCrewLiveLocationShare } from "@/contexts/CrewLiveLocationContext";
 
 type NotifItem = { id: string; read: boolean };
@@ -73,7 +72,7 @@ export default function CrewDashboardScreen() {
 
   const refreshBadge = useCallback(async () => {
     try {
-      const res = await api.get("/user-notifications", { params: { type: "salary" } });
+      const res = await api.get("/user-notifications");
       const raw = res.data?.data ?? res.data ?? [];
       const list = Array.isArray(raw) ? raw : [];
       setNotifItems(normalize(list));
@@ -86,7 +85,7 @@ export default function CrewDashboardScreen() {
     setNotifLoading(true);
     setNotifError(null);
     try {
-      const res = await api.get("/user-notifications", { params: { type: "salary" } });
+      const res = await api.get("/user-notifications");
       const raw = res.data?.data ?? res.data ?? [];
       const list = Array.isArray(raw) ? raw : [];
       const unreadOnly = list.filter(
@@ -114,7 +113,7 @@ export default function CrewDashboardScreen() {
   const markAllRead = async () => {
     try {
       setMarkingAll(true);
-      await api.patch("/user-notifications/read-all", {}, { params: userNotificationSalaryParams() });
+      await api.patch("/user-notifications/read-all");
       setNotifRows([]);
       await refreshBadge();
     } catch (e: any) {
@@ -256,6 +255,19 @@ export default function CrewDashboardScreen() {
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.cardTitle}>Salary</Text>
             <Text style={styles.cardHint}>Disbursement history, status, and payments</Text>
+          </View>
+          <Text style={styles.cardChevron}>›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.85}
+          onPress={() => router.push("/(crew)/my-attendance" as any)}
+        >
+          <Text style={styles.cardEmoji}>🗓️</Text>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.cardTitle}>My Attendance</Text>
+            <Text style={styles.cardHint}>Calendar with present/absent days and total absents</Text>
           </View>
           <Text style={styles.cardChevron}>›</Text>
         </TouchableOpacity>
