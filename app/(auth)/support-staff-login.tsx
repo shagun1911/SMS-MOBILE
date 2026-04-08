@@ -13,6 +13,7 @@ import {
   ImageBackground,
 } from "react-native";
 import api from "@/lib/api";
+import { ensurePushRegistered } from "@/lib/pushNotifications";
 import { useAuthStore } from "@/store/authStore";
 import { isSupportStaffRole } from "@/lib/supportStaffRoles";
 import { AUTH_PORTAL_SUPPORT_STAFF, STAFF_HOME_ROUTES } from "@/lib/staffPortalConfig";
@@ -61,6 +62,7 @@ export default function SupportStaffLoginScreen() {
         accessToken,
         refreshToken
       );
+      void ensurePushRegistered();
       router.replace(STAFF_HOME_ROUTES.support_staff);
     } catch (err: any) {
       setError(err.response?.data?.message || "Invalid credentials");

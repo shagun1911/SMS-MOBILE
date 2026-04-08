@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { ensurePushRegistered } from "@/lib/pushNotifications";
 import { useAuthStore } from "@/store/authStore";
 import { useStudentAuthStore } from "@/store/studentAuthStore";
 import { GlobalRefreshProvider } from "@/contexts/GlobalRefreshContext";
@@ -17,6 +18,12 @@ export default function RootLayout() {
     const t = setTimeout(() => setReady(true), 150);
     return () => clearTimeout(t);
   }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    if (!teacherAuth && !studentAuth) return;
+    void ensurePushRegistered();
+  }, [ready, teacherAuth, studentAuth]);
 
   if (!ready) {
     return (

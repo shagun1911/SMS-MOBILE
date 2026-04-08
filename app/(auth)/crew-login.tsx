@@ -13,6 +13,7 @@ import {
   ImageBackground,
 } from "react-native";
 import api from "@/lib/api";
+import { ensurePushRegistered } from "@/lib/pushNotifications";
 import { useAuthStore } from "@/store/authStore";
 import { isCrewRole } from "@/lib/crewRoles";
 import { AUTH_PORTAL_CREW, STAFF_HOME_ROUTES } from "@/lib/staffPortalConfig";
@@ -61,6 +62,7 @@ export default function CrewLoginScreen() {
         accessToken,
         refreshToken
       );
+      void ensurePushRegistered();
       router.replace(STAFF_HOME_ROUTES.crew);
     } catch (err: any) {
       setError(err.response?.data?.message || "Invalid credentials");

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "472557267806",
+    "project_id": "sms-portal-fe5dc",
+    "storage_bucket": "sms-portal-fe5dc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:472557267806:android:43f7f3d4f908f8f420bdcf",
+        "android_client_info": {
+          "package_name": "com.sms.portal"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBZ-C0jjyRo6a482V7BdIxo4-MGzk8sGDs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

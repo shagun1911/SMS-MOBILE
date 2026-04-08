@@ -13,6 +13,7 @@ import {
   ImageBackground,
 } from "react-native";
 import api from "@/lib/api";
+import { ensurePushRegistered } from "@/lib/pushNotifications";
 import { useAuthStore } from "@/store/authStore";
 
 /** Only teachers may use this app (other staff have separate flows, e.g. Transport). */
@@ -67,6 +68,7 @@ export default function TeacherLoginScreen() {
         accessToken,
         refreshToken
       );
+      void ensurePushRegistered();
       router.replace("/(teacher)/dashboard");
     } catch (err: any) {
       setError(err.response?.data?.message || "Invalid credentials");

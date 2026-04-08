@@ -13,6 +13,7 @@ import {
   ImageBackground,
 } from "react-native";
 import api from "@/lib/api";
+import { ensurePushRegistered } from "@/lib/pushNotifications";
 import { useAuthStore } from "@/store/authStore";
 
 export default function TransportLoginScreen() {
@@ -59,6 +60,7 @@ export default function TransportLoginScreen() {
         accessToken,
         refreshToken
       );
+      void ensurePushRegistered();
       router.replace("/(transport)/dashboard");
     } catch (err: any) {
       setError(err.response?.data?.message || "Invalid credentials");

@@ -12,6 +12,7 @@ import {
   ScrollView,
   ImageBackground,
 } from "react-native";
+import { ensurePushRegistered } from "@/lib/pushNotifications";
 import studentApi from "@/lib/studentApi";
 import { useStudentAuthStore } from "@/store/studentAuthStore";
 
@@ -36,6 +37,7 @@ export default function StudentLoginScreen() {
         password,
       });
       login(data.student, data.accessToken, data.refreshToken);
+      void ensurePushRegistered();
       router.replace("/(student)/dashboard");
     } catch (err: any) {
       setError(err.response?.data?.message || "Invalid credentials");
