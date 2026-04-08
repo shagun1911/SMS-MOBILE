@@ -734,6 +734,18 @@ export default function TransportDashboard() {
           </View>
           <Text style={styles.salaryChevron}>›</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.salaryCard}
+          activeOpacity={0.8}
+          onPress={() => router.push("/(transport)/bus-locations" as any)}
+        >
+          <Text style={styles.salaryEmoji}>📍</Text>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.salaryCardTitle}>Live Bus Locations</Text>
+            <Text style={styles.salaryCardHint}>View online/offline buses and open coordinates in Google Maps</Text>
+          </View>
+          <Text style={styles.salaryChevron}>›</Text>
+        </TouchableOpacity>
         <View style={styles.sectionTitleRow}>
           <Text style={styles.sectionTitle}>Buses</Text>
           <TouchableOpacity style={styles.addBusBtn} onPress={openAddBusModal} activeOpacity={0.85}>
