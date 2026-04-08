@@ -10,6 +10,7 @@ import {
   Pressable,
   TextInput,
   Alert,
+  Linking,
   Platform,
   useWindowDimensions,
 } from "react-native";
@@ -31,6 +32,16 @@ type UserNotifItem = {
   type: string;
   read: boolean;
 };
+
+function isValidCoord(n: unknown, min: number, max: number): n is number {
+  return typeof n === "number" && Number.isFinite(n) && n >= min && n <= max;
+}
+
+function toRoleLabel(role: unknown): string {
+  if (role === "driver") return "Driver";
+  if (role === "conductor") return "Conductor";
+  return "Unknown";
+}
 
 export default function TransportDashboard() {
   const router = useRouter();
@@ -734,18 +745,6 @@ export default function TransportDashboard() {
           </View>
           <Text style={styles.salaryChevron}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.salaryCard}
-          activeOpacity={0.8}
-          onPress={() => router.push("/(transport)/bus-locations" as any)}
-        >
-          <Text style={styles.salaryEmoji}>📍</Text>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.salaryCardTitle}>Live Bus Locations</Text>
-            <Text style={styles.salaryCardHint}>View online/offline buses and open coordinates in Google Maps</Text>
-          </View>
-          <Text style={styles.salaryChevron}>›</Text>
-        </TouchableOpacity>
         <View style={styles.sectionTitleRow}>
           <Text style={styles.sectionTitle}>Buses</Text>
           <TouchableOpacity style={styles.addBusBtn} onPress={openAddBusModal} activeOpacity={0.85}>
@@ -1101,6 +1100,33 @@ export default function TransportDashboard() {
                     <Text style={styles.modalLine}>Bus {bus.busNumber}</Text>
                     <Text style={styles.modalLine}>Reg: {bus.registrationNumber ?? "—"}</Text>
                     <Text style={styles.modalLine}>Route: {bus.routeName ?? "—"}</Text>
+                    {(() => {
+                      const loc = busDetails?.location;
+                      const lat = loc?.latitude;
+                      const lng = loc?.longitude;
+                      const hasLocation = isValidCoord(lat, -90, 90) && isValidCoord(lng, -180, 180);
+                      const mapUrl = hasLocation ? `https://www.google.com/maps?q=${lat},${lng}` : null;
+                      return (
+                        <View style={styles.locationCard}>
+                          <Text style={styles.locationTitle}>Live location</Text>
+                          <Text style={styles.locationLine}>Latitude: {hasLocation ? String(lat) : "N/A"}</Text>
+                          <Text style={styles.locationLine}>Longitude: {hasLocation ? String(lng) : "N/A"}</Text>
+                          <Text style={styles.locationLine}>
+                            Updated by: {toRoleLabel(loc?.updatedByRole)}
+                          </Text>
+                          {!loc?.isOnline ? (
+                            <Text style={styles.locationOffline}>Bus not active</Text>
+                          ) : null}
+                          <TouchableOpacity
+                            style={[styles.mapLinkBtn, (!loc?.isOnline || !mapUrl) && styles.mapLinkBtnDisabled]}
+                            disabled={!loc?.isOnline || !mapUrl}
+                            onPress={() => mapUrl && Linking.openURL(mapUrl)}
+                          >
+                            <Text style={styles.mapLinkBtnText}>Open in Google Maps</Text>
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })()}
                   </>
                 )}
 
@@ -1756,6 +1782,26 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   modalLine: { fontSize: 14, color: "#4b5563", marginTop: 2 },
+  locationCard: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    borderRadius: 12,
+    backgroundColor: "#f8fbff",
+    padding: 10,
+  },
+  locationTitle: { fontSize: 13, fontWeight: "700", color: "#1e3a8a", marginBottom: 4 },
+  locationLine: { fontSize: 13, color: "#334155", marginTop: 2 },
+  locationOffline: { marginTop: 6, fontSize: 12, color: "#b91c1c", fontWeight: "700" },
+  mapLinkBtn: {
+    marginTop: 10,
+    backgroundColor: "#2563eb",
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  mapLinkBtnDisabled: { opacity: 0.45 },
+  mapLinkBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
   row: { flexDirection: "row", gap: 12, marginTop: 14 },
   infoBox: {
     flex: 1,
