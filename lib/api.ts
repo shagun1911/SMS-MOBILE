@@ -1,6 +1,7 @@
 import axios from "axios";
 import { API_BASE_URL } from "@/constants/env";
 import { useAuthStore } from "@/store/authStore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 async function refreshAccessToken(): Promise<string | null> {
   const { refreshToken } = useAuthStore.getState();
@@ -72,6 +73,52 @@ const api = axios.create({
   timeout: 60000,
 });
 
+const CACHE_PREFIX = "sms_http_cache_v1:";
+const DEFAULT_GET_CACHE_TTL_MS = 30_000;
+
+function cacheKeyFor(config: { baseURL?: string; url?: string; params?: unknown }): string | null {
+  const url = (config.url || "").toString();
+  if (!url) return null;
+  const params = config.params ? JSON.stringify(config.params) : "";
+  return `${CACHE_PREFIX}${(config.baseURL || "")}${url}?${params}`;
+}
+
+function shouldCacheGet(url: string): boolean {
+  const u = (url || "").toString();
+  // Cache only read-heavy, non-sensitive endpoints.
+  if (!u.startsWith("/")) return false;
+  if (u.startsWith("/auth")) return false;
+  if (u.includes("/payments")) return false;
+  return [
+    "/schools/me",
+    "/classes",
+    "/exams",
+    "/sessions",
+    "/transport",
+    "/user-notifications",
+    "/attendance",
+    "/transport-attendance",
+    "/timetable",
+  ].some((p) => u.startsWith(p));
+}
+
+async function writeCache(key: string, payload: unknown, ttlMs: number) {
+  const entry = { v: payload, e: Date.now() + Math.max(1000, ttlMs) };
+  await AsyncStorage.setItem(key, JSON.stringify(entry));
+}
+
+async function readCache(key: string): Promise<unknown | null> {
+  const raw = await AsyncStorage.getItem(key);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { v: unknown; e: number };
+    if (!parsed?.e || Date.now() > parsed.e) return null;
+    return parsed.v ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function isFormDataPayload(data: unknown): boolean {
   if (typeof FormData === "undefined" || data == null) return false;
   if (data instanceof FormData) return true;
@@ -94,9 +141,45 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  async (response) => {
+    try {
+      const method = (response.config?.method || "get").toLowerCase();
+      const url = (response.config?.url || "").toString();
+      if (method === "get" && shouldCacheGet(url)) {
+        const key = cacheKeyFor(response.config);
+        if (key) {
+          await writeCache(key, response.data, DEFAULT_GET_CACHE_TTL_MS);
+        }
+      }
+    } catch {
+      // ignore cache write errors
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
+    // Offline fallback: if GET fails with no HTTP response, serve cached data (best effort).
+    try {
+      const method = (originalRequest?.method || "get").toLowerCase();
+      const url = (originalRequest?.url || "").toString();
+      if (method === "get" && !error.response && shouldCacheGet(url)) {
+        const key = cacheKeyFor(originalRequest);
+        if (key) {
+          const cached = await readCache(key);
+          if (cached != null) {
+            return Promise.resolve({
+              data: cached,
+              status: 200,
+              statusText: "OK (cached)",
+              headers: {},
+              config: originalRequest,
+            });
+          }
+        }
+      }
+    } catch {
+      // ignore cache read errors
+    }
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
