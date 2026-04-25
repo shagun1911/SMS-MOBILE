@@ -284,6 +284,7 @@ export default function TransportDashboard() {
 
   const bus = busDetails?.bus;
   const students: any[] = Array.isArray(busDetails?.students) ? busDetails.students : [];
+  const location = busDetails?.location;
 
   // Load all students once modal is open (for assigning)
   useEffect(() => {
@@ -1207,6 +1208,36 @@ export default function TransportDashboard() {
                     )}
                   </View>
                 </View>
+
+                {!editMode && location && location.latitude && location.longitude && (
+                  <View style={[styles.infoBox, { marginTop: 16, width: "100%", backgroundColor: "#f8fafc", borderColor: "#cbd5e1" }]}>
+                    <Text style={styles.infoLabel}>Live Location</Text>
+                    <Text style={styles.infoValue}>
+                      {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+                    </Text>
+                    <Text style={[styles.infoSub, { color: location.isOnline ? "#0f766e" : "#64748b", marginTop: 4, fontWeight: "600" }]}>
+                      {location.isOnline ? "Live tracking active" : "Last known location"}
+                    </Text>
+                    <TouchableOpacity
+                      style={{
+                        marginTop: 12,
+                        backgroundColor: "#0f766e",
+                        paddingVertical: 12,
+                        borderRadius: 8,
+                        alignItems: "center"
+                      }}
+                      onPress={() => {
+                        const { latitude, longitude } = location;
+                        const apple = `http://maps.apple.com/?ll=${latitude},${longitude}&q=School%20bus`;
+                        Linking.openURL(apple).catch(() => {
+                          Linking.openURL(`https://www.google.com/maps?q=${latitude},${longitude}`).catch(() => {});
+                        });
+                      }}
+                    >
+                      <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>Open in Maps</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
 
                 <Text style={[styles.sectionTitle, { marginTop: 16 }]}>
                   Students on this bus ({students.length})
