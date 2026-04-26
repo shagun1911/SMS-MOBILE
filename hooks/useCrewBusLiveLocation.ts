@@ -75,6 +75,12 @@ export function useCrewBusLiveLocation(active: boolean): CrewLocationShareState 
     (async () => {
       setLastError(null);
       try {
+        const servicesEnabled = await Location.hasServicesEnabledAsync();
+        if (!servicesEnabled) {
+          setLastError("Location services (GPS) are disabled. Please enable them in your device settings.");
+          return;
+        }
+
         const res = await api.get("/auth/crew/bus-assignment");
         const bus = res.data?.data?.bus ?? res.data?.bus;
         if (cancelled) return;
@@ -141,44 +147,68 @@ export function useCrewBusLiveLocation(active: boolean): CrewLocationShareState 
         socket.on("connect_error", (err) => {
           if (!cancelled) {
             setSocketConnected(false);
-            setLastError(`Could not connect: ${err.message}`);
+            // We don't set lastError here to make the experience seamless.
+            // Socket.io will automatically try to reconnect, and HTTP fallbacks are still running.
+            console.warn(`Socket connection issue: ${err.message}`);
           }
         });
         socket.on("bus:location:error", (payload: { message?: string }) => {
           if (payload?.message) setLastError(String(payload.message));
         });
 
-        const emitLocation = (coords: Location.LocationObjectCoords) => {
-          if (!socket.connected) return;
-          socket.emit("bus:location:update", {
+        const emitLocation = async (coords: Location.LocationObjectCoords) => {
+          const payload = {
             lat: coords.latitude,
             lng: coords.longitude,
             accuracy: coords.accuracy ?? undefined,
-          });
-        };
-
-        watchRef.current = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.Highest,
-            timeInterval: 5000,
-            distanceInterval: 10,
-          },
-          (loc) => {
-            if (appState.current === "active") {
-              emitLocation(loc.coords);
+          };
+          
+          if (socketRef.current?.connected) {
+            socketRef.current.emit("bus:location:update", payload);
+          } else {
+            // Fallback to HTTP if socket is disconnected to ensure coordinates get through
+            try {
+              await api.post("/auth/crew/bus-location", payload);
+            } catch (e) {
+              console.warn("HTTP location fallback failed", e);
             }
           }
-        );
+        };
+
+        try {
+          watchRef.current = await Location.watchPositionAsync(
+            {
+              accuracy: Location.Accuracy.Highest,
+              timeInterval: 5000,
+              distanceInterval: 10,
+            },
+            (loc) => {
+              if (appState.current === "active") {
+                emitLocation(loc.coords);
+              }
+            }
+          );
+        } catch (watchErr) {
+          // If watchPosition fails (e.g., GPS turned off mid-way), fallback gracefully
+          console.warn("Foreground watch failed:", watchErr);
+          if (!lastError && !cancelled) {
+            setLastError("Could not start active foreground location tracking. Check GPS settings.");
+          }
+        }
 
         // On some Android devices, getLastKnownPositionAsync can hang indefinitely if there is no cache.
         // We use a timeout to prevent it from blocking the 'sharing' state from activating.
-        const last = await Promise.race([
-          Location.getLastKnownPositionAsync(),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
-        ]).catch(() => null);
+        try {
+          const last = await Promise.race([
+            Location.getLastKnownPositionAsync(),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+          ]).catch(() => null);
 
-        if (last && !cancelled) {
-          emitLocation(last.coords);
+          if (last && !cancelled) {
+            emitLocation(last.coords);
+          }
+        } catch (lastErr) {
+          console.warn("Could not get last known position:", lastErr);
         }
 
         if (!cancelled) {
