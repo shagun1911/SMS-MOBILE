@@ -173,15 +173,25 @@ export default function StudentDashboard() {
       setResults(rRes.data.data ?? []);
       const inboxRaw = nRes.data?.data ?? nRes.data ?? [];
       setStudentInbox(Array.isArray(inboxRaw) ? inboxRaw : []);
+
+      // 1. Get IDs from AsyncStorage (local fallback)
+      let localIds: string[] = [];
       if (storedRaw) {
-        try {
-          const arr = JSON.parse(storedRaw) as string[];
-          setSeenSyntheticIds(new Set(Array.isArray(arr) ? arr : []));
-        } catch {
-          setSeenSyntheticIds(new Set());
-        }
-      } else {
-        setSeenSyntheticIds(new Set());
+        try { localIds = JSON.parse(storedRaw) as string[]; } catch { localIds = []; }
+      }
+
+      // 2. Get IDs from Server (source of truth)
+      // Note: We'll fetch the latest student data to get seenNotificationIds
+      const meRes = await studentApi.get("/auth/student/me").catch(() => null);
+      const serverIds = meRes?.data?.data?.seenNotificationIds ?? meRes?.data?.seenNotificationIds ?? [];
+
+      // 3. Merge them
+      const merged = new Set([...localIds, ...serverIds]);
+      setSeenSyntheticIds(merged);
+
+      // 4. If there were local IDs not on server, sync them once
+      if (localIds.some(id => !serverIds.includes(id))) {
+        studentApi.patch("/student-notifications/sync-seen", { seenIds: Array.from(merged) }).catch(() => {});
       }
     } catch {
       // keep prior state on partial failure
@@ -252,10 +262,11 @@ export default function StudentDashboard() {
   const persistSeenSynthetic = useCallback(
     async (next: Set<string>) => {
       if (!student?._id) return;
-      await AsyncStorage.setItem(
-        seenStorageKey(student._id),
-        JSON.stringify([...next])
-      );
+      const arr = Array.from(next);
+      // Update local storage
+      await AsyncStorage.setItem(seenStorageKey(student._id), JSON.stringify(arr));
+      // Sync to server for persistence across logins/devices
+      studentApi.patch("/student-notifications/sync-seen", { seenIds: arr }).catch(() => {});
     },
     [student?._id]
   );

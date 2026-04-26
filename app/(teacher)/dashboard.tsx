@@ -13,6 +13,7 @@ import {
   Platform,
   useWindowDimensions,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
@@ -49,12 +50,12 @@ export default function TeacherDashboard() {
   const [notifError, setNotifError] = useState<string | null>(null);
   const [notifItems, setNotifItems] = useState<TeacherNotification[]>([]);
 
-  const normalizeNotifications = useCallback((list: any[]): TeacherNotification[] => {
+  const normalizeNotifications = useCallback((list: any[], seenIds: Set<string>): TeacherNotification[] => {
     const out: TeacherNotification[] = [];
     for (const n of list) {
       const id = String(n._id ?? n.id ?? "");
       if (!id) continue;
-      const serverRead = n.isRead === true || n.read === true;
+      const serverRead = n.isRead === true || n.read === true || seenIds.has(id);
       if (serverRead) optimisticReadIdsRef.current.delete(id);
       const read = serverRead || optimisticReadIdsRef.current.has(id);
       out.push({
@@ -68,6 +69,15 @@ export default function TeacherDashboard() {
     }
     return out;
   }, []);
+
+  const persistSeenIds = useCallback(async (ids: string[]) => {
+    if (!user?._id) return;
+    try {
+      const key = `sms_staff_notif_seen_${user._id}`;
+      await AsyncStorage.setItem(key, JSON.stringify(ids));
+      await api.patch("/user-notifications/sync-seen", { seenIds: ids }).catch(() => {});
+    } catch {}
+  }, [user?._id]);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -86,10 +96,26 @@ export default function TeacherDashboard() {
     try {
       setNotifLoading(true);
       setNotifError(null);
-      const res = await api.get("/user-notifications");
-      const data = res.data?.data ?? res.data ?? [];
+      const [nRes, meRes, storedRaw] = await Promise.all([
+        api.get("/user-notifications"),
+        api.get("/auth/me").catch(() => null),
+        user?._id ? AsyncStorage.getItem(`sms_staff_notif_seen_${user._id}`) : Promise.resolve(null)
+      ]);
+      const data = nRes.data?.data ?? nRes.data ?? [];
       const list = Array.isArray(data) ? data : [];
-      setNotifItems(normalizeNotifications(list).slice(0, 50));
+      
+      const serverSeenIds = meRes?.data?.data?.seenNotificationIds ?? meRes?.data?.seenNotificationIds ?? [];
+      let localSeenIds: string[] = [];
+      if (storedRaw) {
+        try { localSeenIds = JSON.parse(storedRaw); } catch { localSeenIds = []; }
+      }
+
+      const mergedSeen = new Set<string>([...serverSeenIds, ...localSeenIds]);
+      setNotifItems(normalizeNotifications(list, mergedSeen).slice(0, 50));
+
+      if (localSeenIds.some(id => !serverSeenIds.includes(id))) {
+        api.patch("/user-notifications/sync-seen", { seenIds: Array.from(mergedSeen) }).catch(() => {});
+      }
     } catch (e: any) {
       setNotifError(e?.response?.data?.message ?? "Unable to load notifications.");
     } finally {
@@ -238,12 +264,12 @@ export default function TeacherDashboard() {
               <TouchableOpacity
                 style={styles.markAllButton}
                 onPress={() => {
-                  setNotifItems((items) => {
-                    for (const n of items) {
-                      if (!n.read) optimisticReadIdsRef.current.add(n.id);
-                    }
-                    return items.map((n) => ({ ...n, read: true }));
+                  const updated = notifItems.map((n) => {
+                    if (!n.read) optimisticReadIdsRef.current.add(n.id);
+                    return { ...n, read: true };
                   });
+                  setNotifItems(updated);
+                  persistSeenIds(updated.map((x) => x.id));
                   api.patch("/user-notifications/read-all").catch(() => {});
                 }}
               >
@@ -298,12 +324,16 @@ export default function TeacherDashboard() {
                       activeOpacity={0.8}
                       onPress={() => {
                         optimisticReadIdsRef.current.add(n.id);
-                        setNotifItems((items) =>
-                          items.map((it) =>
-                            it.id === n.id ? { ...it, read: true } : it
-                          )
+                        const updated = notifItems.map((it) =>
+                          it.id === n.id ? { ...it, read: true } : it
                         );
-                        api.patch(`/user-notifications/${n.id}/read`).catch(() => {});
+                        setNotifItems(updated);
+                        persistSeenIds(
+                          updated.filter((x) => x.read).map((x) => x.id)
+                        );
+                        api
+                          .patch(`/user-notifications/${n.id}/read`)
+                          .catch(() => {});
                       }}
                     >
                       <Text style={[styles.notifText, styles.notifTextUnread]}>

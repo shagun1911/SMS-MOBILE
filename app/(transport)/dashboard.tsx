@@ -14,6 +14,7 @@ import {
   Platform,
   useWindowDimensions,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
@@ -112,12 +113,12 @@ export default function TransportDashboard() {
   const [showAddDriverPicker, setShowAddDriverPicker] = useState(false);
   const [showAddConductorPicker, setShowAddConductorPicker] = useState(false);
 
-  const normalizeNotifications = useCallback((list: any[]): UserNotifItem[] => {
+  const normalizeNotifications = useCallback((list: any[], seenIds: Set<string>): UserNotifItem[] => {
     const out: UserNotifItem[] = [];
     for (const n of list) {
       const id = String(n._id ?? n.id ?? "");
       if (!id) continue;
-      const serverRead = n.isRead === true || n.read === true;
+      const serverRead = n.isRead === true || n.read === true || seenIds.has(id);
       if (serverRead) optimisticReadIdsRef.current.delete(id);
       const read = serverRead || optimisticReadIdsRef.current.has(id);
       out.push({
@@ -131,6 +132,15 @@ export default function TransportDashboard() {
     }
     return out;
   }, []);
+
+  const persistSeenIds = useCallback(async (ids: string[]) => {
+    if (!user?._id) return;
+    try {
+      const key = `sms_staff_notif_seen_${user._id}`;
+      await AsyncStorage.setItem(key, JSON.stringify(ids));
+      await api.patch("/user-notifications/sync-seen", { seenIds: ids }).catch(() => {});
+    } catch {}
+  }, [user?._id]);
 
   const loadHome = useCallback(async () => {
     const res = await api.get("/transport");
@@ -148,15 +158,32 @@ export default function TransportDashboard() {
     try {
       setNotifLoading(true);
       setNotifError(null);
-      const nRes = await api.get("/user-notifications");
+      
+      const [nRes, meRes, storedRaw] = await Promise.all([
+        api.get("/user-notifications"),
+        api.get("/auth/me").catch(() => null),
+        user?._id ? AsyncStorage.getItem(`sms_staff_notif_seen_${user._id}`) : Promise.resolve(null)
+      ]);
+
       const nd = nRes.data?.data ?? nRes.data ?? [];
-      setNotifItems(normalizeNotifications(Array.isArray(nd) ? nd : []).slice(0, 50));
+      const serverSeenIds = meRes?.data?.data?.seenNotificationIds ?? meRes?.data?.seenNotificationIds ?? [];
+      let localSeenIds: string[] = [];
+      if (storedRaw) {
+        try { localSeenIds = JSON.parse(storedRaw); } catch { localSeenIds = []; }
+      }
+
+      const mergedSeen = new Set<string>([...serverSeenIds, ...localSeenIds]);
+      setNotifItems(normalizeNotifications(Array.isArray(nd) ? nd : [], mergedSeen).slice(0, 50));
+      
+      if (localSeenIds.some(id => !serverSeenIds.includes(id))) {
+        api.patch("/user-notifications/sync-seen", { seenIds: Array.from(mergedSeen) }).catch(() => {});
+      }
     } catch (e: any) {
       setNotifError(e?.response?.data?.message ?? "Unable to load notifications.");
     } finally {
       setNotifLoading(false);
     }
-  }, [normalizeNotifications]);
+  }, [normalizeNotifications, user?._id]);
 
   useEffect(() => {
     optimisticReadIdsRef.current.clear();
@@ -609,12 +636,12 @@ export default function TransportDashboard() {
               <TouchableOpacity
                 style={styles.notifMarkAll}
                 onPress={() => {
-                  setNotifItems((items) => {
-                    for (const n of items) {
-                      if (!n.read) optimisticReadIdsRef.current.add(n.id);
-                    }
-                    return items.map((n) => ({ ...n, read: true }));
+                  const updated = notifItems.map((n) => {
+                    if (!n.read) optimisticReadIdsRef.current.add(n.id);
+                    return { ...n, read: true };
                   });
+                  setNotifItems(updated);
+                  persistSeenIds(updated.map((x) => x.id));
                   api.patch("/user-notifications/read-all").catch(() => {});
                 }}
               >
@@ -972,9 +999,12 @@ export default function TransportDashboard() {
               <Text style={styles.error}>No details available.</Text>
             ) : (
               <ScrollView
-                style={{ maxHeight: "100%" }}
-                contentContainerStyle={{ paddingBottom: 12 }}
+                style={styles.modalScroll}
+                contentContainerStyle={styles.modalScrollContent}
                 keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={true}
+                persistentScrollbar={true}
+                nestedScrollEnabled={true}
               >
                 <View style={styles.modalHeaderRow}>
                   <Text style={styles.modalTitle}>Bus details</Text>
@@ -1800,10 +1830,17 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     width: "100%",
-    maxHeight: "80%",
-    borderRadius: 18,
+    maxHeight: "85%",
+    borderRadius: 20,
     backgroundColor: "#fff",
-    padding: 16,
+    overflow: "hidden", // Ensures content stays within rounded corners
+  },
+  modalScroll: {
+    flex: 1,
+  },
+  modalScrollContent: {
+    padding: 20,
+    paddingBottom: 40,
   },
   modalTitle: { fontSize: 18, fontWeight: "700", color: "#0f172a", marginBottom: 4 },
   modalHeaderRow: {

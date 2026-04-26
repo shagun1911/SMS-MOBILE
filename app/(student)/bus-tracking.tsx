@@ -266,50 +266,56 @@ export default function StudentBusTrackingScreen() {
         <View style={{ width: 72 }} />
       </View>
 
-      {busMeta ? (
-        <View style={styles.metaRow}>
-          <Text style={styles.metaText}>
-            {busMeta.busNumber ? `Bus ${busMeta.busNumber}` : "Your bus"}
-            {busMeta.routeName ? ` · ${busMeta.routeName}` : ""}
+      <RefreshableScrollView 
+        style={styles.container} 
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        {busMeta ? (
+          <View style={styles.metaRow}>
+            <Text style={styles.metaText}>
+              {busMeta.busNumber ? `Bus ${busMeta.busNumber}` : "Your bus"}
+              {busMeta.routeName ? ` · ${busMeta.routeName}` : ""}
+            </Text>
+          </View>
+        ) : null}
+
+        <View style={styles.statusRow}>
+          <View style={[styles.dot, offline ? styles.dotOff : styles.dotOn]} />
+          <Text style={styles.statusText}>
+            {offline
+              ? "Bus offline — waiting for driver location or GPS signal."
+              : socketConnected
+                ? "Live · connected"
+                : "Reconnecting…"}
           </Text>
         </View>
-      ) : null}
 
-      <View style={styles.statusRow}>
-        <View style={[styles.dot, offline ? styles.dotOff : styles.dotOn]} />
-        <Text style={styles.statusText}>
-          {offline
-            ? "Bus offline — waiting for driver location or GPS signal."
-            : socketConnected
-              ? "Live · connected"
-              : "Reconnecting…"}
-        </Text>
-      </View>
+        {Platform.OS === "web" ? (
+          <View style={styles.webFallback}>
+            <Text style={styles.muted}>Use the iOS or Android app for the full bus tracking view.</Text>
+            {location ? (
+              <Text style={styles.coords}>
+                Last: {location.lat.toFixed(5)}, {location.lng.toFixed(5)}
+              </Text>
+            ) : null}
+          </View>
+        ) : (
+          <View style={styles.mapSection}>
+            <BusMapPanel location={location} offline={offline} />
+          </View>
+        )}
 
-      {Platform.OS === "web" ? (
-        <View style={styles.webFallback}>
-          <Text style={styles.muted}>Use the iOS or Android app for the full bus tracking view.</Text>
-          {location ? (
-            <Text style={styles.coords}>
-              Last: {location.lat.toFixed(5)}, {location.lng.toFixed(5)}
-            </Text>
-          ) : null}
-        </View>
-      ) : (
-        <View style={styles.mapSection}>
-          <BusMapPanel location={location} offline={offline} />
-        </View>
-      )}
-
-      {location ? (
-        <View style={styles.footer}>
-          <Text style={styles.footerHint}>Updated {formatUpdatedAt(location.updatedAt)}</Text>
-        </View>
-      ) : (
-        <View style={styles.footer}>
-          <Text style={styles.footerHint}>No location yet. When your driver shares GPS, the bus will appear here.</Text>
-        </View>
-      )}
+        {location ? (
+          <View style={styles.footer}>
+            <Text style={styles.footerHint}>Updated {formatUpdatedAt(location.updatedAt)}</Text>
+          </View>
+        ) : (
+          <View style={styles.footer}>
+            <Text style={styles.footerHint}>No location yet. When your driver shares GPS, the bus will appear here.</Text>
+          </View>
+        )}
+      </RefreshableScrollView>
     </SafeAreaView>
   );
 }
@@ -317,7 +323,7 @@ export default function StudentBusTrackingScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#f8fafc" },
   container: { flex: 1 },
-  scrollContent: { paddingBottom: 32 },
+  scrollContent: { flexGrow: 1 },
   topBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -361,5 +367,5 @@ const styles = StyleSheet.create({
   coords: { marginTop: 12, fontSize: 14, color: "#0f172a" },
   footer: { padding: 12, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#e2e8f0" },
   footerHint: { fontSize: 12, color: "#64748b", textAlign: "center" },
-  mapSection: { flex: 1, minHeight: 0 },
+  mapSection: { flex: 1, minHeight: 450 },
 });

@@ -11,6 +11,7 @@ import {
   Alert,
   useWindowDimensions,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useAuthStore } from "@/store/authStore";
@@ -47,16 +48,25 @@ export default function SupportDashboardScreen() {
   const [notifError, setNotifError] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
 
-  const normalize = useCallback((list: any[]): NotifItem[] => {
+  const normalize = useCallback((list: any[], seenIds: Set<string>): NotifItem[] => {
     const out: NotifItem[] = [];
     for (const n of list) {
       const id = String(n._id ?? n.id ?? "");
       if (!id) continue;
-      const read = n.isRead === true || n.read === true;
+      const read = n.isRead === true || n.read === true || seenIds.has(id);
       out.push({ id, read });
     }
     return out;
   }, []);
+
+  const persistSeenIds = useCallback(async (ids: string[]) => {
+    if (!user?._id) return;
+    try {
+      const key = `sms_staff_notif_seen_${user._id}`;
+      await AsyncStorage.setItem(key, JSON.stringify(ids));
+      await api.patch("/user-notifications/sync-seen", { seenIds: ids }).catch(() => {});
+    } catch {}
+  }, [user?._id]);
 
   const mapRows = useCallback((list: any[]): NotifRow[] => {
     return list.map((n) => ({
@@ -69,14 +79,25 @@ export default function SupportDashboardScreen() {
 
   const refreshBadge = useCallback(async () => {
     try {
-      const res = await api.get("/user-notifications");
-      const raw = res.data?.data ?? res.data ?? [];
+      const [nRes, meRes, storedRaw] = await Promise.all([
+        api.get("/user-notifications"),
+        api.get("/auth/me").catch(() => null),
+        user?._id ? AsyncStorage.getItem(`sms_staff_notif_seen_${user._id}`) : Promise.resolve(null)
+      ]);
+      const raw = nRes.data?.data ?? nRes.data ?? [];
       const list = Array.isArray(raw) ? raw : [];
-      setNotifItems(normalize(list));
+      
+      const serverSeenIds = meRes?.data?.data?.seenNotificationIds ?? meRes?.data?.seenNotificationIds ?? [];
+      let localSeenIds: string[] = [];
+      if (storedRaw) {
+        try { localSeenIds = JSON.parse(storedRaw); } catch { localSeenIds = []; }
+      }
+      const mergedSeen = new Set<string>([...serverSeenIds, ...localSeenIds]);
+      setNotifItems(normalize(list, mergedSeen));
     } catch {
       setNotifItems([]);
     }
-  }, [normalize]);
+  }, [normalize, user?._id]);
 
   const loadModalNotifications = useCallback(async () => {
     setNotifLoading(true);
@@ -110,6 +131,7 @@ export default function SupportDashboardScreen() {
   const markAllRead = async () => {
     try {
       setMarkingAll(true);
+      persistSeenIds(notifItems.map((n) => n.id));
       await api.patch("/user-notifications/read-all");
       setNotifRows([]);
       await refreshBadge();
@@ -123,6 +145,7 @@ export default function SupportDashboardScreen() {
 
   const onTapNotification = async (id: string) => {
     try {
+      persistSeenIds([...notifItems.filter((n) => n.read).map((n) => n.id), id]);
       await api.patch(`/user-notifications/${encodeURIComponent(id)}/read`);
       setNotifRows((prev) => prev.filter((r) => r._id !== id));
       await refreshBadge();
