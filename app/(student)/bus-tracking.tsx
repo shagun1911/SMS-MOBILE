@@ -129,7 +129,7 @@ export default function StudentBusTrackingScreen() {
     try {
       socket = io(SOCKET_BASE_URL, {
         path: "/socket.io",
-        transports: ["websocket"],
+        transports: ["polling", "websocket"],
         auth: { token },
         reconnection: true,
         reconnectionAttempts: Infinity,

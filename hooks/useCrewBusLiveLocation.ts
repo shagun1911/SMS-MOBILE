@@ -120,7 +120,7 @@ export function useCrewBusLiveLocation(active: boolean): CrewLocationShareState 
 
         const socket = io(SOCKET_BASE_URL, {
           path: "/socket.io",
-          transports: ["websocket"],
+          transports: ["polling", "websocket"],
           auth: { token },
           reconnection: true,
           reconnectionAttempts: Infinity,
@@ -138,10 +138,10 @@ export function useCrewBusLiveLocation(active: boolean): CrewLocationShareState 
         socket.on("disconnect", () => {
           if (!cancelled) setSocketConnected(false);
         });
-        socket.on("connect_error", () => {
+        socket.on("connect_error", (err) => {
           if (!cancelled) {
             setSocketConnected(false);
-            setLastError("Could not connect for live tracking. Retrying…");
+            setLastError(`Could not connect: ${err.message}`);
           }
         });
         socket.on("bus:location:error", (payload: { message?: string }) => {
