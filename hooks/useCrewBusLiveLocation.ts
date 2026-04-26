@@ -101,9 +101,9 @@ export function useCrewBusLiveLocation(active: boolean): CrewLocationShareState 
             const started = await Location.hasStartedLocationUpdatesAsync(BUS_LOCATION_TASK);
             if (!started) {
               await Location.startLocationUpdatesAsync(BUS_LOCATION_TASK, {
-                accuracy: Location.Accuracy.Balanced,
-                timeInterval: 10_000,
-                distanceInterval: 25,
+                accuracy: Location.Accuracy.Highest,
+                timeInterval: 8000,
+                distanceInterval: 15,
                 foregroundService: {
                   notificationTitle: "Bus location sharing",
                   notificationBody: "Students on your route can see live bus position.",
@@ -159,9 +159,9 @@ export function useCrewBusLiveLocation(active: boolean): CrewLocationShareState 
 
         watchRef.current = await Location.watchPositionAsync(
           {
-            accuracy: Location.Accuracy.Balanced,
-            timeInterval: 8000,
-            distanceInterval: 20,
+            accuracy: Location.Accuracy.Highest,
+            timeInterval: 5000,
+            distanceInterval: 10,
           },
           (loc) => {
             if (appState.current === "active") {
@@ -170,7 +170,13 @@ export function useCrewBusLiveLocation(active: boolean): CrewLocationShareState 
           }
         );
 
-        const last = await Location.getLastKnownPositionAsync();
+        // On some Android devices, getLastKnownPositionAsync can hang indefinitely if there is no cache.
+        // We use a timeout to prevent it from blocking the 'sharing' state from activating.
+        const last = await Promise.race([
+          Location.getLastKnownPositionAsync(),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+        ]).catch(() => null);
+
         if (last && !cancelled) {
           emitLocation(last.coords);
         }
