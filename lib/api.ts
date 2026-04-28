@@ -3,16 +3,27 @@ import { API_BASE_URL } from "@/constants/env";
 import { useAuthStore } from "@/store/authStore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+let refreshRequest: Promise<string | null> | null = null;
+
 async function refreshAccessToken(): Promise<string | null> {
-  const { refreshToken } = useAuthStore.getState();
-  if (!refreshToken) return null;
-  const { data } = await axios.post(`${API_BASE_URL}/auth/refresh-token`, {
-    refreshToken,
-  });
-  const newToken = data.token ?? data.accessToken;
-  const newRefresh = data.refreshToken;
-  useAuthStore.getState().setTokens(newToken, newRefresh ?? refreshToken);
-  return newToken ?? null;
+  if (!refreshRequest) {
+    refreshRequest = (async () => {
+      const { refreshToken } = useAuthStore.getState();
+      if (!refreshToken) return null;
+      const { data } = await axios.post(`${API_BASE_URL}/auth/refresh-token`, {
+        refreshToken,
+      });
+      const newToken = data.token ?? data.accessToken;
+      const newRefresh = data.refreshToken;
+      if (newToken) {
+        useAuthStore.getState().setTokens(newToken, newRefresh ?? refreshToken);
+      }
+      return newToken ?? null;
+    })().finally(() => {
+      refreshRequest = null;
+    });
+  }
+  return refreshRequest;
 }
 
 /**
@@ -183,14 +194,8 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
-        const { refreshToken } = useAuthStore.getState();
-        if (!refreshToken) throw new Error("No refresh token");
-        const { data } = await axios.post(`${API_BASE_URL}/auth/refresh-token`, {
-          refreshToken,
-        });
-        const newToken = data.token ?? data.accessToken;
-        const newRefreshToken = data.refreshToken;
-        useAuthStore.getState().setTokens(newToken, newRefreshToken ?? refreshToken);
+        const newToken = await refreshAccessToken();
+        if (!newToken) throw new Error("No refresh token");
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return api(originalRequest);
       } catch {
