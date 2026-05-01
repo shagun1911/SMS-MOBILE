@@ -47,12 +47,24 @@ export default function StudentFeesScreen() {
   const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
 
   const loadFees = useCallback(async () => {
-    const [res, stored] = await Promise.all([
+    const [res, meRes, stored] = await Promise.all([
       studentApi.get("/fees/student/me"),
+      studentApi.get("/auth/me").catch(() => null),
       AsyncStorage.getItem(NOTIF_SEEN_KEY),
     ]);
     setFeeData(res.data.data);
-    if (stored) setSeenIds(new Set(JSON.parse(stored)));
+    
+    const serverSeenIds = meRes?.data?.data?.seenNotificationIds ?? meRes?.data?.seenNotificationIds ?? [];
+    let localSeenIds: string[] = [];
+    if (stored) {
+      try { localSeenIds = JSON.parse(stored); } catch { localSeenIds = []; }
+    }
+    const mergedSeen = new Set<string>([...serverSeenIds, ...localSeenIds]);
+    setSeenIds(mergedSeen);
+
+    if (localSeenIds.some(id => !serverSeenIds.includes(id))) {
+      studentApi.patch("/student-notifications/sync-seen", { seenIds: Array.from(mergedSeen) }).catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -81,6 +93,7 @@ export default function StudentFeesScreen() {
     const updated = new Set(ids);
     setSeenIds(updated);
     await AsyncStorage.setItem(NOTIF_SEEN_KEY, JSON.stringify(ids));
+    await studentApi.patch("/student-notifications/sync-seen", { seenIds: ids }).catch(() => {});
   }, []);
 
   const totalFee = feeData?.totalYearlyFee ?? 0;
