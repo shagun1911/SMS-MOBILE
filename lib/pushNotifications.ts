@@ -88,20 +88,36 @@ export async function ensurePushRegistered(): Promise<void> {
   // Attach listeners first (idempotent).
   attachListeners(messagingFactory);
 
-  // Request permission once — OS shows the system dialog on very first call.
-  const asked = await AsyncStorage.getItem(PERMISSION_ASKED_KEY);
-  if (!asked) {
-    await messagingFactory().requestPermission();
-    await AsyncStorage.setItem(PERMISSION_ASKED_KEY, "1");
+  // Request permission — OS shows the system dialog ONLY if it hasn't been shown before.
+  // Otherwise, it just returns the current status (Authorized/Denied).
+  try {
+    const status = await messagingFactory().requestPermission();
+    const authorized =
+      status === messagingFactory.AuthorizationStatus.AUTHORIZED ||
+      status === messagingFactory.AuthorizationStatus.PROVISIONAL;
+
+    if (!authorized) {
+      console.log("[Push] Notification permission not granted.");
+      return;
+    }
+  } catch (err) {
+    console.error("[Push] Error requesting permission:", err);
+    return;
   }
 
   // Register FCM token with backend.
-  const token = await messagingFactory().getToken();
-  if (!token) return;
+  try {
+    const token = await messagingFactory().getToken();
+    if (!token) return;
 
-  if (isStaff) {
-    await api.post("/auth/save-device-token", { token });
-  } else {
-    await studentApi.post("/auth/student/save-device-token", { token });
+    if (isStaff) {
+      await api.post("/auth/save-device-token", { token });
+      console.log("[Push] Registered staff token with backend.");
+    } else if (isStudent) {
+      await studentApi.post("/auth/student/save-device-token", { token });
+      console.log("[Push] Registered student token with backend.");
+    }
+  } catch (err) {
+    console.error("[Push] Failed to register token with backend:", err);
   }
 }

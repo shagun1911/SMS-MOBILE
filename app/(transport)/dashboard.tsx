@@ -13,6 +13,7 @@ import {
   Linking,
   Platform,
   useWindowDimensions,
+  TouchableWithoutFeedback,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -628,7 +629,8 @@ export default function TransportDashboard() {
         onRequestClose={() => setNotifOpen(false)}
       >
         <Pressable style={styles.notifBackdrop} onPress={() => setNotifOpen(false)}>
-          <View style={styles.notifModalCard} onStartShouldSetResponder={() => true}>
+          <TouchableWithoutFeedback>
+            <View style={styles.notifModalCard}>
             <Text style={styles.notifModalTitle}>Notifications</Text>
             <Text style={styles.notifModalSub}>Unread messages only.</Text>
 
@@ -714,7 +716,8 @@ export default function TransportDashboard() {
                 })}
               </ScrollView>
             )}
-          </View>
+            </View>
+          </TouchableWithoutFeedback>
         </Pressable>
       </Modal>
 
@@ -985,10 +988,8 @@ export default function TransportDashboard() {
             setShowConductorPicker(false);
           }}
         >
-          <View
-            style={styles.modalCard}
-            onStartShouldSetResponder={() => true}
-          >
+          <TouchableWithoutFeedback>
+            <View style={styles.modalCard}>
             {detailsLoading ? (
               <View style={styles.modalStateWrap}>
                 <View style={styles.modalStateHeader}>
@@ -1433,7 +1434,8 @@ export default function TransportDashboard() {
                 )}
               </ScrollView>
             )}
-          </View>
+            </View>
+          </TouchableWithoutFeedback>
         </Pressable>
       </Modal>
 
@@ -1447,10 +1449,8 @@ export default function TransportDashboard() {
           style={styles.pickerBackdrop}
           onPress={() => setShowDriverPicker(false)}
         >
-          <View
-            style={styles.pickerSheet}
-            onStartShouldSetResponder={() => true}
-          >
+          <TouchableWithoutFeedback>
+            <View style={styles.pickerSheet}>
             <Text style={styles.pickerTitle}>Choose driver</Text>
             <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
               <TouchableOpacity
@@ -1482,7 +1482,8 @@ export default function TransportDashboard() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-          </View>
+            </View>
+          </TouchableWithoutFeedback>
         </Pressable>
       </Modal>
 
@@ -1496,10 +1497,8 @@ export default function TransportDashboard() {
           style={styles.pickerBackdrop}
           onPress={() => setShowConductorPicker(false)}
         >
-          <View
-            style={styles.pickerSheet}
-            onStartShouldSetResponder={() => true}
-          >
+          <TouchableWithoutFeedback>
+            <View style={styles.pickerSheet}>
             <Text style={styles.pickerTitle}>Choose conductor</Text>
             <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
               <TouchableOpacity
@@ -1531,7 +1530,8 @@ export default function TransportDashboard() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-          </View>
+            </View>
+          </TouchableWithoutFeedback>
         </Pressable>
       </Modal>
 
@@ -1542,7 +1542,8 @@ export default function TransportDashboard() {
         onRequestClose={() => setShowAddDriverPicker(false)}
       >
         <Pressable style={styles.pickerBackdrop} onPress={() => setShowAddDriverPicker(false)}>
-          <View style={styles.pickerSheet} onStartShouldSetResponder={() => true}>
+          <TouchableWithoutFeedback>
+            <View style={styles.pickerSheet}>
             <Text style={styles.pickerTitle}>Choose driver</Text>
             <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
               <TouchableOpacity
@@ -1574,7 +1575,8 @@ export default function TransportDashboard() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-          </View>
+            </View>
+          </TouchableWithoutFeedback>
         </Pressable>
       </Modal>
 
@@ -1585,7 +1587,8 @@ export default function TransportDashboard() {
         onRequestClose={() => setShowAddConductorPicker(false)}
       >
         <Pressable style={styles.pickerBackdrop} onPress={() => setShowAddConductorPicker(false)}>
-          <View style={styles.pickerSheet} onStartShouldSetResponder={() => true}>
+          <TouchableWithoutFeedback>
+            <View style={styles.pickerSheet}>
             <Text style={styles.pickerTitle}>Choose conductor</Text>
             <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
               <TouchableOpacity
@@ -1617,7 +1620,8 @@ export default function TransportDashboard() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-          </View>
+            </View>
+          </TouchableWithoutFeedback>
         </Pressable>
       </Modal>
     </RefreshableScrollView>

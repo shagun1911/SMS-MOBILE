@@ -13,7 +13,10 @@
       }
     },
     "production": {
-      "extends": "apk"
+      "extends": "apk",
+      "android": {
+        "buildType": "app-bundle"
+      }
     }
   }
 }
