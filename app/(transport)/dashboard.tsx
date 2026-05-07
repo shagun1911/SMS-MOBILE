@@ -628,7 +628,7 @@ export default function TransportDashboard() {
         onRequestClose={() => setNotifOpen(false)}
       >
         <Pressable style={styles.notifBackdrop} onPress={() => setNotifOpen(false)}>
-          <Pressable style={styles.notifModalCard} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.notifModalCard} onStartShouldSetResponder={() => true}>
             <Text style={styles.notifModalTitle}>Notifications</Text>
             <Text style={styles.notifModalSub}>Unread messages only.</Text>
 
@@ -714,7 +714,7 @@ export default function TransportDashboard() {
                 })}
               </ScrollView>
             )}
-          </Pressable>
+          </View>
         </Pressable>
       </Modal>
 
@@ -985,18 +985,65 @@ export default function TransportDashboard() {
             setShowConductorPicker(false);
           }}
         >
-          <Pressable
+          <View
             style={styles.modalCard}
-            onPress={(e) => e.stopPropagation()}
+            onStartShouldSetResponder={() => true}
           >
             {detailsLoading ? (
-              <View style={styles.center}>
-                <ActivityIndicator size="large" color="#4f46e5" />
+              <View style={styles.modalStateWrap}>
+                <View style={styles.modalStateHeader}>
+                  <Text style={styles.modalTitle}>Bus details</Text>
+                  <TouchableOpacity
+                    hitSlop={12}
+                    onPress={() => {
+                      setDetailsOpen(false);
+                      setEditMode(false);
+                    }}
+                  >
+                    <Text style={styles.modalCloseX}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.center}>
+                  <ActivityIndicator size="large" color="#4f46e5" />
+                  <Text style={styles.modalStateText}>Loading bus details…</Text>
+                </View>
               </View>
             ) : detailsError ? (
-              <Text style={styles.error}>{detailsError}</Text>
+              <View style={styles.modalStateWrap}>
+                <View style={styles.modalStateHeader}>
+                  <Text style={styles.modalTitle}>Bus details</Text>
+                  <TouchableOpacity
+                    hitSlop={12}
+                    onPress={() => {
+                      setDetailsOpen(false);
+                      setEditMode(false);
+                    }}
+                  >
+                    <Text style={styles.modalCloseX}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.center}>
+                  <Text style={styles.error}>{detailsError}</Text>
+                </View>
+              </View>
             ) : !bus ? (
-              <Text style={styles.error}>No details available.</Text>
+              <View style={styles.modalStateWrap}>
+                <View style={styles.modalStateHeader}>
+                  <Text style={styles.modalTitle}>Bus details</Text>
+                  <TouchableOpacity
+                    hitSlop={12}
+                    onPress={() => {
+                      setDetailsOpen(false);
+                      setEditMode(false);
+                    }}
+                  >
+                    <Text style={styles.modalCloseX}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.center}>
+                  <Text style={styles.error}>No details available.</Text>
+                </View>
+              </View>
             ) : (
               <ScrollView
                 style={styles.modalScroll}
@@ -1386,7 +1433,7 @@ export default function TransportDashboard() {
                 )}
               </ScrollView>
             )}
-          </Pressable>
+          </View>
         </Pressable>
       </Modal>
 
@@ -1400,9 +1447,9 @@ export default function TransportDashboard() {
           style={styles.pickerBackdrop}
           onPress={() => setShowDriverPicker(false)}
         >
-          <Pressable
+          <View
             style={styles.pickerSheet}
-            onPress={(e) => e.stopPropagation()}
+            onStartShouldSetResponder={() => true}
           >
             <Text style={styles.pickerTitle}>Choose driver</Text>
             <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
@@ -1435,7 +1482,7 @@ export default function TransportDashboard() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-          </Pressable>
+          </View>
         </Pressable>
       </Modal>
 
@@ -1449,9 +1496,9 @@ export default function TransportDashboard() {
           style={styles.pickerBackdrop}
           onPress={() => setShowConductorPicker(false)}
         >
-          <Pressable
+          <View
             style={styles.pickerSheet}
-            onPress={(e) => e.stopPropagation()}
+            onStartShouldSetResponder={() => true}
           >
             <Text style={styles.pickerTitle}>Choose conductor</Text>
             <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
@@ -1484,7 +1531,7 @@ export default function TransportDashboard() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-          </Pressable>
+          </View>
         </Pressable>
       </Modal>
 
@@ -1495,7 +1542,7 @@ export default function TransportDashboard() {
         onRequestClose={() => setShowAddDriverPicker(false)}
       >
         <Pressable style={styles.pickerBackdrop} onPress={() => setShowAddDriverPicker(false)}>
-          <Pressable style={styles.pickerSheet} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.pickerSheet} onStartShouldSetResponder={() => true}>
             <Text style={styles.pickerTitle}>Choose driver</Text>
             <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
               <TouchableOpacity
@@ -1527,7 +1574,7 @@ export default function TransportDashboard() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-          </Pressable>
+          </View>
         </Pressable>
       </Modal>
 
@@ -1538,7 +1585,7 @@ export default function TransportDashboard() {
         onRequestClose={() => setShowAddConductorPicker(false)}
       >
         <Pressable style={styles.pickerBackdrop} onPress={() => setShowAddConductorPicker(false)}>
-          <Pressable style={styles.pickerSheet} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.pickerSheet} onStartShouldSetResponder={() => true}>
             <Text style={styles.pickerTitle}>Choose conductor</Text>
             <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
               <TouchableOpacity
@@ -1570,7 +1617,7 @@ export default function TransportDashboard() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-          </Pressable>
+          </View>
         </Pressable>
       </Modal>
     </RefreshableScrollView>
@@ -1830,10 +1877,12 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     width: "100%",
-    maxHeight: "85%",
+    minHeight: "55%",
+    maxHeight: "90%",
     borderRadius: 20,
     backgroundColor: "#fff",
-    overflow: "hidden", // Ensures content stays within rounded corners
+    // No overflow:hidden — it blocks ScrollView scrolling on Android.
+    // Border radius is still visible because the white background covers the backdrop.
   },
   modalScroll: {
     flex: 1,
@@ -1841,6 +1890,27 @@ const styles = StyleSheet.create({
   modalScrollContent: {
     padding: 20,
     paddingBottom: 40,
+  },
+  modalStateWrap: {
+    flex: 1,
+    padding: 20,
+  },
+  modalStateHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  modalCloseX: {
+    fontSize: 20,
+    color: "#64748b",
+    padding: 4,
+  },
+  modalStateText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#64748b",
+    textAlign: "center",
   },
   modalTitle: { fontSize: 18, fontWeight: "700", color: "#0f172a", marginBottom: 4 },
   modalHeaderRow: {
