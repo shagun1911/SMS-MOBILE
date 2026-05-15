@@ -3,7 +3,7 @@
     "version": ">= 9.0.0"
   },
   "build": {
-    "apk": {
+    "production": {
       "channel": "production",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://sms-backend-om73.onrender.com"
@@ -11,13 +11,6 @@
       "android": {
         "buildType": "apk"
       }
-    },
-    "production": {
-      "extends": "apk",
-      "android": {
-        "buildType": "app-bundle"
-      }
     }
   }
 }
-
